@@ -1,0 +1,16 @@
+{
+    "Metadata": {
+        "title": "Transparency Flight Tracker 🇻🇪",
+        "description": "Real-time tracking of airline delays and cancellations in Venezuela. Promoting transparency in aviation.",
+        "keywords": "venezuela, flights, tracker, maiquetia, delays"
+    },
+    "Dashboard": {
+        "title": "Venezuela Flight Radar",
+        "theme": "Change Theme",
+        "language": "Change Language",
+        "share": "Share",
+        "date": "Date",
+        "filters": "Filters",
+        "info": "Info"
+    }
+}

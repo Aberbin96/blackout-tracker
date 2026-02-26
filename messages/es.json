@@ -1,0 +1,16 @@
+{
+    "Metadata": {
+        "title": "Rastreador de Vuelos de Transparencia 🇻🇪",
+        "description": "Seguimiento en tiempo real de retrasos y cancelaciones de aerolíneas en Venezuela. Promoviendo la transparencia en la aviación.",
+        "keywords": "venezuela, vuelos, rastreador, maiquetia, retrasos"
+    },
+    "Dashboard": {
+        "title": "Radar de Vuelos Venezuela",
+        "theme": "Cambiar Tema",
+        "language": "Cambiar Idioma",
+        "share": "Compartir",
+        "date": "Fecha",
+        "filters": "Filtros",
+        "info": "Info"
+    }
+}
