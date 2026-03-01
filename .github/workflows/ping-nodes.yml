@@ -9,6 +9,7 @@ on:
 jobs:
     ping-monitoring-nodes:
         runs-on: ubuntu-latest
+        environment: production
         strategy:
             matrix:
                 state:
