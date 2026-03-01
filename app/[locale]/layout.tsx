@@ -23,6 +23,9 @@ export async function generateMetadata({
   const t = await getTranslations({ locale, namespace: "Metadata" });
 
   return {
+    metadataBase: new URL(
+      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+    ),
     title: t("title"),
     description: t("description"),
     keywords: t("keywords"),

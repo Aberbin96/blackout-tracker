@@ -9,19 +9,31 @@ const providers = Object.keys(VENEZUELA_ISPS);
 const isAggressive = process.argv.includes("--aggressive");
 const isLoop = process.argv.includes("--loop");
 
+// Order providers roughly by size (smallest to largest) to get quick wins first
+const sortedProviders = providers.sort((a, b) => {
+  const hugeProviders = ["CANTV", "INTER", "NETUNO"];
+  const isAHuge = hugeProviders.includes(a);
+  const isBHuge = hugeProviders.includes(b);
+
+  if (isAHuge && !isBHuge) return 1;
+  if (!isAHuge && isBHuge) return -1;
+  return 0; // Keep original order for others
+});
+
 async function runDiscovery() {
   console.log(
     `\n--- Launching Discovery Cycle ${new Date().toLocaleString()} ---`,
   );
   console.log(`Settings: Aggressive=${isAggressive}, Loop=${isLoop}`);
+  console.log(`Provider Order: ${sortedProviders.join(", ")}`);
 
-  const tasks = providers.map((provider) => {
-    return new Promise((resolve) => {
-      console.log(`[Launcher] Starting worker for ${provider}...`);
+  for (const provider of sortedProviders) {
+    console.log(`\n[Launcher] --- Starting worker for ${provider} ---`);
 
-      const args = ["tsx", "scripts/discover-ips.ts", provider];
-      if (isAggressive) args.push("--aggressive");
+    const args = ["tsx", "scripts/discover-ips.ts", provider];
+    if (isAggressive) args.push("--aggressive");
 
+    await new Promise((resolve) => {
       const worker = spawn("npx", args, {
         stdio: "inherit",
         shell: true,
@@ -42,9 +54,8 @@ async function runDiscovery() {
         resolve(1);
       });
     });
-  });
+  }
 
-  await Promise.all(tasks);
   console.log(`--- Cycle Finished at ${new Date().toLocaleString()} ---`);
 
   if (isLoop) {

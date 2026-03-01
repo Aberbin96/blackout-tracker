@@ -1,16 +1,70 @@
 {
     "Metadata": {
-        "title": "Transparency Flight Tracker 🇻🇪",
-        "description": "Real-time tracking of airline delays and cancellations in Venezuela. Promoting transparency in aviation.",
-        "keywords": "venezuela, flights, tracker, maiquetia, delays"
+        "title": "Vzla Blackout Tracker 🇻🇪",
+        "description": "Real-time monitoring of power outages and network connectivity in Venezuela. Promoting transparency and data-driven insights.",
+        "keywords": "venezuela, blackout, electricity, tracker, network, connectivity"
     },
     "Dashboard": {
-        "title": "Venezuela Flight Radar",
-        "theme": "Change Theme",
-        "language": "Change Language",
-        "share": "Share",
-        "date": "Date",
-        "filters": "Filters",
-        "info": "Info"
+        "title": "Vzla Blackout Tracker",
+        "experimental": "Experimental Monitoring System",
+        "support": "Support",
+        "copySuccess": "Link copied to clipboard!",
+        "status": {
+            "live": "LIVE",
+            "operational": "Operational",
+            "outage": "Outage",
+            "unknown": "Unknown"
+        },
+        "stats": {
+            "availability": "National Availability",
+            "infrastructure": "Detected Infrastructure",
+            "infrastructureDesc": "Top Infrastructure Providers",
+            "devices": "Total Devices",
+            "latency": "Network Latency",
+            "targets": "Total monitoring targets across all ISPs",
+            "response": "Response time from active IoT nodes",
+            "fast": "Ultra Fast",
+            "slow": "High Ping",
+            "liveNodes": "Live"
+        },
+        "map": {
+            "title": "Live Connectivity Map",
+            "detected": "Detected Nodes"
+        },
+        "table": {
+            "title": "Regional Status Overview",
+            "region": "Region / Node",
+            "availability": "Availability",
+            "status": "Status",
+            "sync": "Last Sync",
+            "empty": "No regional data available. Please run the network scanner."
+        },
+        "charts": {
+            "title": "Historical Analytics",
+            "uptimeDay": "Uptime per Day (%)",
+            "uptimeHour": "24H Performance Profile",
+            "service": "Service Uptime",
+            "realtime": "Real-time sampling from active nodes",
+            "awaiting": "Awaiting connectivity data..."
+        },
+        "sidebar": {
+            "neural": "Neural Module",
+            "version": "v4.0 Alpha Stable",
+            "config": "Configuration",
+            "region": "Geographic Region",
+            "backbone": "Network Backbone",
+            "allRegions": "Overview (Nationwide)",
+            "allCarriers": "All Carriers",
+            "reset": "Reset Interface",
+            "menu": {
+                "realtime": "Real-time",
+                "map": "Map Hub",
+                "metrics": "Metrics",
+                "telegram": "Join Telegram"
+            },
+            "critical": "Critical Zone",
+            "blackout": "Blackout Duration",
+            "rationing": "Rationing Active"
+        }
     }
 }

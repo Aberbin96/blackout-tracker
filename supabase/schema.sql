@@ -62,3 +62,18 @@ CREATE INDEX IF NOT EXISTS idx_targets_active ON monitoring_targets(is_active);
 ALTER TABLE monitoring_targets ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow service manage" ON monitoring_targets;
 CREATE POLICY "Allow all management" ON monitoring_targets FOR ALL USING (true) WITH CHECK (true);
+
+-- Geolocation cache to avoid redundant API calls
+CREATE TABLE IF NOT EXISTS ip_geolocation_cache (
+    ip TEXT PRIMARY KEY,
+    data JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for cache lookups
+CREATE INDEX IF NOT EXISTS idx_geo_cache_ip ON ip_geolocation_cache(ip);
+
+-- Enable RLS for cache
+ALTER TABLE ip_geolocation_cache ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all manage cache" ON ip_geolocation_cache FOR ALL USING (true) WITH CHECK (true);

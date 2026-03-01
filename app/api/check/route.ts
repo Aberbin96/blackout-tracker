@@ -3,6 +3,7 @@ import {
   MonitoringService,
   CheckResult,
 } from "@/services/monitoring/MonitoringService";
+import { AnalyzerService } from "@/services/analyzer";
 
 export async function POST(request: Request) {
   // Optional: Add basic security check (e.g., CRON_SECRET)
@@ -16,6 +17,11 @@ export async function POST(request: Request) {
 
   try {
     const results = await MonitoringService.performAllChecks();
+
+    // Trigger analysis asynchronously so we don't block the API response
+    AnalyzerService.analyze(results).catch((err) => {
+      console.error("[Analyzer] Trigger failed:", err.message);
+    });
 
     // Group results by state and then provider
     const stats: any = {};

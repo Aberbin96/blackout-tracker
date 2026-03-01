@@ -2,6 +2,7 @@ import axios from "axios";
 import path from "path";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+import { classifyDevice, detectNetworkType } from "../utils/classifier";
 
 // Load environment variables
 dotenv.config({ path: path.join(process.cwd(), ".env.local") });
@@ -84,13 +85,12 @@ async function getServiceMetadata(ip: string, port: number): Promise<any> {
 }
 
 async function main() {
-  console.log("--- Starting Deep Service Enrichment ---");
+  console.log("--- Starting Deep Service Enrichment & Classification ---");
 
-  // Fetch targets that have web ports open and lack enrichment metadata
-  // We can also just fetch all and re-process
+  // Fetch all active targets
   const { data: targets, error } = await supabase
     .from("monitoring_targets")
-    .select("id, ip, services, metadata")
+    .select("id, ip, services, metadata, provider, asn")
     .is("is_active", true);
 
   if (error || !targets) {
@@ -104,36 +104,57 @@ async function main() {
     const target = targets[i];
     const ports = target.services || [];
 
-    // We only care about IPs with web ports
+    // 1. Basic Classification (ASN/Provider based)
+    const networkType = detectNetworkType(
+      target.provider,
+      target.asn,
+      target.metadata?.mobile || false,
+    );
+
+    // 2. Deep Enrichment (Web Ports)
     const webPort = ports.find((p: number) =>
       [80, 443, 8080, 8081, 8888].includes(p),
     );
 
-    if (!webPort) continue;
-
-    process.stdout.write(
-      `[${i + 1}/${targets.length}] Enriching ${target.ip}... `,
-    );
-
-    const newMetadata = await getServiceMetadata(target.ip, webPort);
-
-    if (Object.keys(newMetadata).length > 0) {
-      const { error: updateError } = await supabase
-        .from("monitoring_targets")
-        .update({ metadata: { ...target.metadata, ...newMetadata } })
-        .eq("id", target.id);
-
-      if (updateError) {
-        process.stdout.write(`Error: ${updateError.message}\n`);
-      } else {
-        process.stdout.write("Done.\n");
-      }
+    let combinedMetadata = { ...target.metadata };
+    if (webPort) {
+      process.stdout.write(
+        `[${i + 1}/${targets.length}] Deep enriching ${target.ip}... `,
+      );
+      const newMetadata = await getServiceMetadata(target.ip, webPort);
+      combinedMetadata = { ...combinedMetadata, ...newMetadata };
     } else {
-      process.stdout.write("No metadata found.\n");
+      process.stdout.write(
+        `[${i + 1}/${targets.length}] Quick classifying ${target.ip}... `,
+      );
+    }
+
+    // 3. Device Type Classification
+    const deviceType = classifyDevice(combinedMetadata);
+
+    const { error: updateError } = await supabase
+      .from("monitoring_targets")
+      .update({
+        metadata: combinedMetadata,
+        device_type: deviceType,
+        network_type: networkType,
+        is_mobile: networkType === "mobile",
+      })
+      .eq("id", target.id);
+
+    if (updateError) {
+      process.stdout.write(`Error: ${updateError.message}\n`);
+    } else {
+      process.stdout.write(`Done (${networkType}/${deviceType}).\n`);
+    }
+
+    // Delay to avoid overwhelming
+    if (webPort) {
+      await new Promise((r) => setTimeout(r, 100));
     }
   }
 
-  console.log("\nEnrichment complete.");
+  console.log("\nEnrichment and Classification complete.");
 }
 
 main();

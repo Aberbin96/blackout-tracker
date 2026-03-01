@@ -1,16 +1,70 @@
 {
     "Metadata": {
-        "title": "Rastreador de Vuelos de Transparencia 🇻🇪",
-        "description": "Seguimiento en tiempo real de retrasos y cancelaciones de aerolíneas en Venezuela. Promoviendo la transparencia en la aviación.",
-        "keywords": "venezuela, vuelos, rastreador, maiquetia, retrasos"
+        "title": "Vzla Blackout Tracker 🇻🇪",
+        "description": "Monitoreo en tiempo real de cortes eléctricos y conectividad de red en Venezuela. Promoviendo la transparencia y los datos.",
+        "keywords": "venezuela, apagones, electricidad, tracker, red, conectividad"
     },
     "Dashboard": {
-        "title": "Radar de Vuelos Venezuela",
-        "theme": "Cambiar Tema",
-        "language": "Cambiar Idioma",
-        "share": "Compartir",
-        "date": "Fecha",
-        "filters": "Filtros",
-        "info": "Info"
+        "title": "Vzla Blackout Tracker",
+        "experimental": "Sistema de Monitoreo Experimental",
+        "support": "Soporte",
+        "copySuccess": "¡Enlace copiado al portapapeles!",
+        "status": {
+            "live": "EN VIVO",
+            "operational": "Operacional",
+            "outage": "Apagón",
+            "unknown": "Desconocido"
+        },
+        "stats": {
+            "availability": "Disponibilidad Nacional",
+            "infrastructure": "Infraestructura Detectada",
+            "infrastructureDesc": "Principales Operadoras de Infraestructura",
+            "devices": "Dispositivos Totales",
+            "latency": "Latencia de Red",
+            "targets": "Objetivos de monitoreo en todos los ISPs",
+            "response": "Tiempo de respuesta de nodos IoT activos",
+            "fast": "Ultra Rápido",
+            "slow": "Ping Alto",
+            "liveNodes": "Activos"
+        },
+        "map": {
+            "title": "Mapa de Conectividad en Vivo",
+            "detected": "Nodos Detectados"
+        },
+        "table": {
+            "title": "Resumen de Estado Regional",
+            "region": "Región / Nodo",
+            "availability": "Disponibilidad",
+            "status": "Estado",
+            "sync": "Última Sincro",
+            "empty": "No hay datos regionales disponibles. Por favor, corre el escáner de red."
+        },
+        "charts": {
+            "title": "Analítica Histórica",
+            "uptimeDay": "Uptime por Día (%)",
+            "uptimeHour": "Perfil de Rendimiento 24H",
+            "service": "Uptime del Servicio",
+            "realtime": "Muestreo en tiempo real de nodos activos",
+            "awaiting": "Esperando datos de conectividad..."
+        },
+        "sidebar": {
+            "neural": "Módulo Neural",
+            "version": "v4.0 Alpha Estable",
+            "config": "Configuración",
+            "region": "Región Geográfica",
+            "backbone": "Troncal de Red",
+            "allRegions": "Resumen (Nacional)",
+            "allCarriers": "Todas las Operadoras",
+            "reset": "Reiniciar Interfaz",
+            "menu": {
+                "realtime": "Tiempo Real",
+                "map": "Hub de Mapas",
+                "metrics": "Métricas",
+                "telegram": "Unirse a Telegram"
+            },
+            "critical": "Zona Crítica",
+            "blackout": "Duración del Apagón",
+            "rationing": "Racionamiento Activo"
+        }
     }
 }
