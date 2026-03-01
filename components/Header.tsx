@@ -99,20 +99,6 @@ export function Header() {
           >
             <Icon name="share" />
           </button>
-
-          <button className="flex items-center justify-center rounded-xl h-10 px-5 bg-secondary text-white gap-2 text-sm font-black hover:scale-105 transition-all shadow-lg shadow-secondary/10 uppercase italic">
-            <Icon name="coffee" className="text-[18px]" />
-            <span>{t("support")}</span>
-          </button>
-        </div>
-
-        {/* User Profile Placeholder */}
-        <div className="glass-card rounded-full size-10 flex items-center justify-center overflow-hidden border-2 border-white/20 hover:border-accent transition-colors cursor-pointer">
-          <img
-            className="w-full h-full object-cover"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDYMBJVs4jtWi9oSbsKlWApGhi5x3txu30rYLEPslKCnUYn4FLAfYCF-9Y6Z9sWlZ543Wf_0kCCNjqf14rU4jgBemb_QlGvFN5Bk45e7xegmp3WAMMqnoaaYUGFlu-RliD2ipV7zFIKlxtrC7NWREkTG7qv8GQTZjnczFdJP5QwoIJgIMuul57RzhgfZwxyNWqyo6WX6IELg-4Bi1q2L1xORowZEZ7RultO-unocSICT1N3HKDrkCXJuHgl43abxWl-pNzSsLW8xHF1"
-            alt="User avatar"
-          />
         </div>
       </div>
     </header>

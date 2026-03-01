@@ -1,7 +1,6 @@
 import net from "net";
 import { supabase } from "@/utils/supabase";
 import { normalizeStateName } from "@/utils/normalization";
-import { TelegramService } from "../notifications/TelegramService";
 
 export interface CheckResult {
   ip: string;
@@ -14,27 +13,81 @@ export interface CheckResult {
 
 export class MonitoringService {
   /**
-   * Performs a connectivity check for all active targets from Supabase.
+   * Performs a connectivity check for active targets from Supabase.
+   * If state is provided, only checks targets in that state.
    */
-  static async performAllChecks(): Promise<CheckResult[]> {
+  static async performAllChecks(stateFilter?: string): Promise<CheckResult[]> {
     const timestamp = new Date().toISOString();
 
-    // Fetch active targets from Supabase
-    const { data: targets, error } = await supabase
-      .from("monitoring_targets")
-      .select("*")
-      .eq("is_active", true);
+    // Fetch active targets from Supabase with retry logic
+    let targets: any[] = [];
+    let retries = 3;
+    let fetchError: any = null;
 
-    if (error || !targets) {
-      console.error("Error fetching targets from Supabase:", error);
+    while (retries > 0) {
+      try {
+        let query = supabase
+          .from("monitoring_targets")
+          .select("*")
+          .eq("is_active", true);
+
+        if (stateFilter) {
+          query = query.eq("state", stateFilter.toLowerCase());
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+        if (data) {
+          targets = data;
+          break; // Success
+        }
+      } catch (err) {
+        fetchError = err;
+        retries--;
+        if (retries > 0) {
+          console.warn(`Supabase fetch timeout. Retrying... (${retries} left)`);
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+      }
+    }
+
+    if (!targets || targets.length === 0) {
+      console.error(
+        "Error fetching targets from Supabase after retries:",
+        fetchError?.message || fetchError,
+      );
       return [];
     }
 
-    // Fire all checks in parallel
-    const checkPromises = targets.map((target) =>
-      this.checkIp(target, timestamp),
-    );
-    const results = await Promise.all(checkPromises);
+    // Group targets by state to divide the sync process
+    const targetsByState: Record<string, any[]> = {};
+    targets.forEach((t) => {
+      const state = t.state || "unknown";
+      if (!targetsByState[state]) targetsByState[state] = [];
+      targetsByState[state].push(t);
+    });
+
+    const results: CheckResult[] = [];
+
+    // Process each state sequentially
+    for (const stateTargets of Object.values(targetsByState)) {
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < stateTargets.length; i += CHUNK_SIZE) {
+        const chunk = stateTargets.slice(i, i + CHUNK_SIZE);
+        const checkPromises = chunk.map((target) =>
+          this.checkIp(target, timestamp),
+        );
+        const chunkResults = await Promise.all(checkPromises);
+        results.push(...chunkResults);
+
+        // Tiny delay between chunks to let OS clear TCP connection states
+        await new Promise((r) => setTimeout(r, 100));
+      }
+
+      // Additional delay between states to further divide the load
+      await new Promise((r) => setTimeout(r, 400));
+    }
 
     // Store results in Supabase in the background
     this.storeResults(results).catch((err) =>
@@ -57,37 +110,52 @@ export class MonitoringService {
     timestamp: string,
   ): Promise<CheckResult> {
     const startTime = Date.now();
-    const port = target.services?.[0] || 80;
 
-    return new Promise((resolve) => {
-      const socket = new net.Socket();
-      let status: "online" | "offline" = "offline";
-      let latency: number | undefined;
+    // If we saved the service port during discovery, use it. Otherwise guess based on common VE ports.
+    const portsToTry =
+      target.services?.length > 0
+        ? [target.services[0]]
+        : [80, 443, 8080, 8291]; // 8291 is Mikrotik, very common
 
-      socket.setTimeout(2500);
+    let status: "online" | "offline" = "offline";
+    let latency: number | undefined;
 
-      socket.connect(port, target.ip, () => {
-        status = "online";
-        latency = Date.now() - startTime;
-        socket.destroy();
+    // Try ports sequentially until one answers (for nodes missing precise port data)
+    for (const port of portsToTry) {
+      const isResponsive = await new Promise<boolean>((resolve) => {
+        const socket = new net.Socket();
+        socket.setTimeout(3500); // 3.5s timeout for high latency VE links
+
+        socket.connect(port, target.ip, () => {
+          socket.destroy();
+          resolve(true);
+        });
+
+        const fail = () => {
+          socket.destroy();
+          resolve(false);
+        };
+
+        socket.on("error", fail);
+        socket.on("timeout", fail);
+        socket.on("close", fail);
       });
 
-      const handleEnd = () => {
-        socket.destroy();
-        resolve({
-          ip: target.ip,
-          provider: target.provider,
-          state: normalizeStateName(target.state),
-          status,
-          latency,
-          timestamp,
-        });
-      };
+      if (isResponsive) {
+        status = "online";
+        latency = Date.now() - startTime;
+        break; // Found an open port, stop trying others
+      }
+    }
 
-      socket.on("error", handleEnd);
-      socket.on("timeout", handleEnd);
-      socket.on("close", handleEnd);
-    });
+    return {
+      ip: target.ip,
+      provider: target.provider,
+      state: normalizeStateName(target.state),
+      status,
+      latency,
+      timestamp,
+    };
   }
 
   private static async storeResults(results: CheckResult[]) {
@@ -180,18 +248,18 @@ export class MonitoringService {
 
           // Send Telegram Alert based on severity
           if (severity === "massive") {
-            await TelegramService.sendBlackoutAlert(
-              state,
-              counts.total,
-              counts.offline,
-            );
+            // await TelegramService.sendBlackoutAlert(
+            //   state,
+            //   counts.total,
+            //   counts.offline,
+            // );
           } else if (severity === "partial") {
             // We could add a specialized partial alert here
-            await TelegramService.sendBlackoutAlert(
-              state,
-              counts.total,
-              counts.offline,
-            );
+            // await TelegramService.sendBlackoutAlert(
+            //   state,
+            //   counts.total,
+            //   counts.offline,
+            // );
           }
         }
       } else if (activeEvent) {
@@ -205,7 +273,7 @@ export class MonitoringService {
           })
           .eq("id", activeEvent.id);
 
-        await TelegramService.sendBlackoutResolved(state);
+        // await TelegramService.sendBlackoutResolved(state);
       }
     }
   }

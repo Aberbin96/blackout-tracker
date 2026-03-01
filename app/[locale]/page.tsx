@@ -12,6 +12,7 @@ import {
   getMapData,
   getFiltersData,
   getHistoricalStats,
+  getActiveBlackouts,
 } from "@/services/stats";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,7 @@ export default async function Home({ searchParams }: PageProps) {
     mapData,
     filters,
     historicalStats,
+    blackouts,
   ] = await Promise.all([
     getDashboardStats(activeState, activeProvider),
     getRegionalStats(activeState, activeProvider),
@@ -43,6 +45,7 @@ export default async function Home({ searchParams }: PageProps) {
     getMapData(activeState, activeProvider),
     getFiltersData(),
     getHistoricalStats(activeState, activeProvider),
+    getActiveBlackouts(),
   ]);
 
   return (
@@ -53,7 +56,11 @@ export default async function Home({ searchParams }: PageProps) {
         <div className="absolute top-[-10%] right-[-10%] size-[500px] bg-secondary/5 blur-[120px] rounded-full pointer-events-none z-0"></div>
         <div className="absolute bottom-[-10%] left-[-10%] size-[500px] bg-accent/5 blur-[120px] rounded-full pointer-events-none z-0"></div>
 
-        <Sidebar states={filters.states} providers={filters.providers} />
+        <Sidebar
+          states={filters.states}
+          providers={filters.providers}
+          activeBlackouts={blackouts}
+        />
         <main className="flex-1 overflow-y-auto p-6 md:p-10 space-y-10 relative z-10 custom-scrollbar">
           {/* Stats Overview */}
           <DashboardStats

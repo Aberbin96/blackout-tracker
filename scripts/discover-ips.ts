@@ -67,47 +67,65 @@ async function getGeoBatch(ips: string[]): Promise<any[]> {
   const cachedIps = new Set(cachedData?.map((d) => d.ip) || []);
   const uncachedIps = ips.filter((ip) => !cachedIps.has(ip));
 
-  let apiResults: any[] = [];
+  const apiResults: any[] = [];
 
-  // 2. Query external API for missing ones
+  // 2. Query external API for missing ones in chunks of 100 (API Limit)
   if (uncachedIps.length > 0) {
-    let retries = 3;
-    while (retries > 0) {
-      try {
-        const queries = uncachedIps.map((ip) => ({
-          query: ip,
-          fields:
-            "status,message,countryCode,regionName,city,zip,lat,lon,timezone,reverse,mobile,proxy,query",
-        }));
-        const resp = await axios.post("http://ip-api.com/batch", queries, {
-          timeout: 10000, // 10s timeout for the API itself
-        });
-        apiResults = resp.data;
+    const BATCH_LIMIT = 100;
 
-        // 3. Save new results to cache
-        const cacheEntries = apiResults
-          .filter((r) => r.status === "success")
-          .map((r) => ({
-            ip: r.query,
-            data: r,
-            updated_at: new Date().toISOString(),
+    for (let i = 0; i < uncachedIps.length; i += BATCH_LIMIT) {
+      const chunk = uncachedIps.slice(i, i + BATCH_LIMIT);
+      let retries = 3;
+
+      while (retries > 0) {
+        try {
+          const queries = chunk.map((ip) => ({
+            query: ip,
+            fields:
+              "status,message,countryCode,regionName,city,zip,lat,lon,timezone,reverse,mobile,proxy,query",
           }));
 
-        if (cacheEntries.length > 0) {
-          await supabase.from("ip_geolocation_cache").upsert(cacheEntries);
+          const resp = await axios.post("http://ip-api.com/batch", queries, {
+            timeout: 15000,
+          });
+
+          const chunkResults = resp.data;
+          apiResults.push(...chunkResults);
+
+          // 3. Save new results to cache
+          const cacheEntries = chunkResults
+            .filter((r: any) => r.status === "success")
+            .map((r: any) => ({
+              ip: r.query,
+              data: r,
+              updated_at: new Date().toISOString(),
+            }));
+
+          if (cacheEntries.length > 0) {
+            await supabase.from("ip_geolocation_cache").upsert(cacheEntries);
+          }
+          break; // Success for this chunk!
+        } catch (error: any) {
+          retries--;
+          if (retries === 0) {
+            console.error(
+              `  Error calling ip-api batch (final attempt):`,
+              error.message,
+            );
+          } else {
+            const isRateLimit = error.response?.status === 429;
+            const waitTime = isRateLimit ? 10000 : 5000; // wait longer on rate limits
+            console.warn(
+              `  ip-api ${isRateLimit ? "RATE LIMIT" : "timeout"}, waiting ${waitTime / 1000}s and retrying chunk... (${retries} left)`,
+            );
+            await new Promise((r) => setTimeout(r, waitTime));
+          }
         }
-        break; // Success!
-      } catch (error: any) {
-        retries--;
-        if (retries === 0) {
-          console.error(
-            "  Error calling ip-api batch (final attempt):",
-            error.message,
-          );
-        } else {
-          console.warn(`  ip-api timeout/error, retrying... (${retries} left)`);
-          await new Promise((r) => setTimeout(r, 2000)); // wait 2s before retry
-        }
+      }
+
+      // Delay between chunks to respect rate limits (15 requests per minute = 1 every 4s)
+      if (i + BATCH_LIMIT < uncachedIps.length) {
+        await new Promise((r) => setTimeout(r, 4500));
       }
     }
   }
@@ -172,6 +190,13 @@ async function saveIpToDb(
     },
     { onConflict: "ip" },
   );
+
+  if (error) {
+    console.error(
+      `\n  [DB ERROR] Failed to save IP ${geoResult.query}:`,
+      error.message,
+    );
+  }
 
   return !error;
 }

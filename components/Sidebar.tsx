@@ -8,19 +8,32 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 interface SidebarProps {
   states: string[];
   providers: string[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  activeBlackouts?: any[];
 }
 
-export function Sidebar({ states, providers }: SidebarProps) {
+export function Sidebar({
+  states,
+  providers,
+  activeBlackouts = [],
+}: SidebarProps) {
   const t = useTranslations("Dashboard");
   const [isOpen, setIsOpen] = useState(false);
+  const [now, setNow] = useState<number | null>(null);
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { replace } = useRouter();
 
   useEffect(() => {
+    const initialTimer = setTimeout(() => setNow(Date.now()), 0);
+    const interval = setInterval(() => setNow(Date.now()), 60000);
     const handleToggle = () => setIsOpen((prev) => !prev);
     document.addEventListener("toggleSidebar", handleToggle);
-    return () => document.removeEventListener("toggleSidebar", handleToggle);
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+      document.removeEventListener("toggleSidebar", handleToggle);
+    };
   }, []);
 
   const handleFilterChange = (key: string, value: string) => {
@@ -35,6 +48,16 @@ export function Sidebar({ states, providers }: SidebarProps) {
 
   const activeState = searchParams.get("state") || "";
   const activeProvider = searchParams.get("provider") || "";
+
+  // Helper to format duration
+  const getDuration = (startedAt: string) => {
+    if (!now) return "0m";
+    const diff = now - new Date(startedAt).getTime();
+    if (diff < 0) return "0m";
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+  };
 
   return (
     <>
@@ -56,20 +79,8 @@ export function Sidebar({ states, providers }: SidebarProps) {
           overflow-y-auto
         `}
       >
-        <div className="flex flex-col gap-1">
-          <h1 className="text-foreground text-sm font-black uppercase tracking-[0.2em] italic">
-            {t("sidebar.neural")}
-          </h1>
-          <div className="flex items-center gap-2">
-            <div className="size-1.5 rounded-full bg-accent animate-pulse"></div>
-            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">
-              {t("sidebar.version")}
-            </p>
-          </div>
-        </div>
-
         {/* Filters Section */}
-        <div className="space-y-6 pt-6 border-t border-white/5">
+        <div className="space-y-6 pt-6">
           <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
             {t("sidebar.config")}
           </h2>
@@ -132,80 +143,43 @@ export function Sidebar({ states, providers }: SidebarProps) {
           )}
         </div>
 
-        <nav className="flex flex-col gap-2 mt-2">
-          <a
-            className="flex items-center gap-4 px-4 py-3 rounded-xl bg-secondary text-white shadow-lg shadow-secondary/20 transition-transform active:scale-95"
-            href="#"
-          >
-            <Icon name="grid_view" className="text-lg" />
-            <span className="text-sm font-black uppercase tracking-wider italic">
-              {t("sidebar.menu.realtime")}
-            </span>
-          </a>
-          <a
-            className="flex items-center gap-4 px-4 py-3 rounded-xl text-slate-500 hover:bg-white/5 hover:text-foreground transition-all group"
-            href="#"
-          >
-            <Icon
-              name="explore"
-              className="text-lg group-hover:text-accent transition-colors"
-            />
-            <span className="text-sm font-black uppercase tracking-wider italic">
-              {t("sidebar.menu.map")}
-            </span>
-          </a>
-          <a
-            className="flex items-center gap-4 px-4 py-3 rounded-xl text-slate-500 hover:bg-white/5 hover:text-foreground transition-all group"
-            href="#"
-          >
-            <Icon
-              name="analytics"
-              className="text-lg group-hover:text-accent transition-colors"
-            />
-            <span className="text-sm font-black uppercase tracking-wider italic">
-              {t("sidebar.menu.metrics")}
-            </span>
-          </a>
+        {activeBlackouts.length > 0 && (
+          <div className="mt-auto pt-6 border-t border-white/5">
+            <h3 className="text-[10px] font-black text-danger flex items-center gap-2 mb-4 uppercase tracking-[.2em]">
+              <div className="size-2 rounded-full bg-danger animate-ping"></div>
+              {t("sidebar.critical") || "ZONA CRÍTICA"}
+            </h3>
+            <div className="space-y-4">
+              {activeBlackouts.slice(0, 3).map((event) => {
+                const severity =
+                  event.metadata?.current_severity ||
+                  event.metadata?.initial_severity ||
+                  "unknown";
+                const isMassive = severity === "massive";
+                const duration = getDuration(event.started_at);
 
-          <a
-            className="flex items-center gap-4 px-4 py-3 rounded-xl text-accent glass-card border-accent/20 bg-accent/5 hover:bg-accent/10 transition-all mt-4 group"
-            href="https://t.me/your_bot_user"
-            target="_blank"
-          >
-            <Icon
-              name="electric_bolt"
-              className="text-accent group-hover:scale-110 transition-transform"
-            />
-            <span className="text-xs font-black italic uppercase tracking-tighter">
-              {t("sidebar.menu.telegram")}
-            </span>
-          </a>
-        </nav>
-
-        <div className="mt-auto pt-6 border-t border-white/5">
-          <h3 className="text-[10px] font-black text-danger flex items-center gap-2 mb-4 uppercase tracking-[.2em]">
-            <div className="size-2 rounded-full bg-danger animate-ping"></div>
-            {t("sidebar.critical")}
-          </h3>
-          <div className="space-y-4">
-            <div className="glass-card p-4 border-l-4 border-l-danger bg-danger/5 rounded-l-none">
-              <p className="text-[10px] font-black text-danger uppercase italic">
-                Maracaibo (Norte)
-              </p>
-              <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tighter">
-                {t("sidebar.blackout")}: 4h 12m
-              </p>
-            </div>
-            <div className="glass-card p-4 border-l-4 border-l-danger bg-danger/5 rounded-l-none">
-              <p className="text-[10px] font-black text-danger uppercase italic">
-                San Cristóbal
-              </p>
-              <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tighter">
-                {t("sidebar.rationing")}: 6h 45m
-              </p>
+                return (
+                  <div
+                    key={event.id}
+                    className={`glass-card p-4 border-l-4 ${isMassive ? "border-l-danger bg-danger/5" : "border-l-warning bg-warning/5"} rounded-l-none`}
+                  >
+                    <p
+                      className={`text-[10px] font-black ${isMassive ? "text-danger" : "text-warning"} uppercase italic`}
+                    >
+                      {event.state}
+                    </p>
+                    <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tighter">
+                      {isMassive
+                        ? t("sidebar.blackout") || "APAGÓN MASIVO"
+                        : t("sidebar.rationing") || "FALLA PARCIAL"}
+                      : {duration}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        </div>
+        )}
       </aside>
     </>
   );

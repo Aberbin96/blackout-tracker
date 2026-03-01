@@ -55,7 +55,7 @@
             "backbone": "Troncal de Red",
             "allRegions": "Resumen (Nacional)",
             "allCarriers": "Todas las Operadoras",
-            "reset": "Reiniciar Interfaz",
+            "reset": "Reiniciar",
             "menu": {
                 "realtime": "Tiempo Real",
                 "map": "Hub de Mapas",

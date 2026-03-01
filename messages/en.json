@@ -55,7 +55,7 @@
             "backbone": "Network Backbone",
             "allRegions": "Overview (Nationwide)",
             "allCarriers": "All Carriers",
-            "reset": "Reset Interface",
+            "reset": "Reset",
             "menu": {
                 "realtime": "Real-time",
                 "map": "Map Hub",

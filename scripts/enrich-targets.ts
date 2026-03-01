@@ -90,7 +90,7 @@ async function main() {
   // Fetch all active targets
   const { data: targets, error } = await supabase
     .from("monitoring_targets")
-    .select("id, ip, services, metadata, provider, asn")
+    .select("id, ip, services, classification_metadata, provider, asn")
     .is("is_active", true);
 
   if (error || !targets) {
@@ -108,7 +108,7 @@ async function main() {
     const networkType = detectNetworkType(
       target.provider,
       target.asn,
-      target.metadata?.mobile || false,
+      target.classification_metadata?.mobile || false,
     );
 
     // 2. Deep Enrichment (Web Ports)
@@ -116,7 +116,7 @@ async function main() {
       [80, 443, 8080, 8081, 8888].includes(p),
     );
 
-    let combinedMetadata = { ...target.metadata };
+    let combinedMetadata = { ...target.classification_metadata };
     if (webPort) {
       process.stdout.write(
         `[${i + 1}/${targets.length}] Deep enriching ${target.ip}... `,
@@ -135,7 +135,7 @@ async function main() {
     const { error: updateError } = await supabase
       .from("monitoring_targets")
       .update({
-        metadata: combinedMetadata,
+        classification_metadata: combinedMetadata,
         device_type: deviceType,
         network_type: networkType,
         is_mobile: networkType === "mobile",

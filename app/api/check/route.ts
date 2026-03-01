@@ -16,7 +16,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const results = await MonitoringService.performAllChecks();
+    const url = new URL(request.url);
+    const stateFilter = url.searchParams.get("state") || undefined;
+
+    const results = await MonitoringService.performAllChecks(stateFilter);
 
     // Trigger analysis asynchronously so we don't block the API response
     AnalyzerService.analyze(results).catch((err) => {

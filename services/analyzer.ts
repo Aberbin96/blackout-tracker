@@ -1,6 +1,5 @@
 import { supabase } from "@/utils/supabase";
 import { CheckResult } from "@/services/monitoring/MonitoringService";
-import { TelegramService } from "./notifications/TelegramService";
 
 export class AnalyzerService {
   /**
@@ -69,11 +68,11 @@ export class AnalyzerService {
         });
 
         // Trigger notification
-        await TelegramService.sendBlackoutAlert(
-          state,
-          stats.total,
-          stats.offline,
-        );
+        // await TelegramService.sendBlackoutAlert(
+        //   state,
+        //   stats.total,
+        //   stats.offline,
+        // );
       } else if (isResolved && activeEvent) {
         // Blackout resolved!
         console.log(
@@ -91,7 +90,7 @@ export class AnalyzerService {
           .eq("id", activeEvent.id);
 
         // Trigger notification
-        await TelegramService.sendBlackoutResolved(state);
+        // await TelegramService.sendBlackoutResolved(state);
       } else if (activeEvent) {
         // Active blackout exists, just update the node counts
         await supabase

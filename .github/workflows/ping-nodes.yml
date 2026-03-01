@@ -1,0 +1,62 @@
+name: 📡 Ping Nodes (Cron)
+
+on:
+    schedule:
+        # Run every 5 minutes to keep stats fresh and analyzer responsive
+        - cron: "*/5 * * * *"
+    workflow_dispatch: # Allows you to manually trigger it from the GitHub Actions tab
+
+jobs:
+    ping-monitoring-nodes:
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                state:
+                    [
+                        zulia,
+                        miranda,
+                        distrito federal,
+                        carabobo,
+                        barinas,
+                        bolivar,
+                        lara,
+                        aragua,
+                        anzoategui,
+                        apure,
+                        monagas,
+                        portuguesa,
+                        tachira,
+                        merida,
+                        vargas,
+                        estado trujillo,
+                        nueva esparta,
+                        amazonas,
+                    ]
+            max-parallel: 3 # Process at most 3 states at exactly the same time to avoid hitting Vercel/Supabase limits
+            fail-fast: false # Don't stop other states if one times out
+        steps:
+            - name: Stagger Execution
+              run: sleep $(( (RANDOM % 45) )) # Sleep between 0 and 45 seconds to spread the load across the first minute
+
+            - name: Hit Ping Endpoint
+              run: |
+                  echo "Hitting Blackout Tracker API for state: ${{ matrix.state }}..."
+
+                  # URL encode the state name (for states with spaces like "distrito federal")
+                  ENCODED_STATE=$(jq -nr --arg v "${{ matrix.state }}" '$v|@uri')
+
+                  response=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.API_CHECK_URL }}?state=${ENCODED_STATE}" \
+                       -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+                       -H "Content-Type: application/json")
+
+                  body=$(echo "$response" | head -n -1)
+                  status_code=$(echo "$response" | tail -n 1)
+
+                  echo "Response Status: $status_code"
+                  echo "Response Body: $body"
+
+                  if [ "$status_code" -ne 200 ]; then
+                    echo "::error::API check failed with status $status_code"
+                    # Exit 0 anyway so we don't spam GitHub failure emails for temporary network timeouts
+                    exit 0
+                  fi

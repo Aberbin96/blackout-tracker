@@ -331,3 +331,17 @@ export async function getHistoricalStats(state?: string, provider?: string) {
 
   return { daily, hourly };
 }
+
+export async function getActiveBlackouts() {
+  const { data, error } = await supabase
+    .from("blackout_events")
+    .select("*")
+    .eq("status", "active")
+    .order("started_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching active blackouts:", error);
+    return [];
+  }
+  return data || [];
+}
