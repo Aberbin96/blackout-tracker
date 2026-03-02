@@ -11,12 +11,12 @@ export async function getDashboardStats(state?: string, provider?: string) {
 
   const { count: totalNodes } = await query;
 
-  const timeWindowAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
   let checkQuery = supabase
     .from("connectivity_checks")
     .select("ip, status, latency")
-    .gt("timestamp", timeWindowAgo)
+    .gt("timestamp", fifteenMinutesAgo)
     .order("timestamp", { ascending: false });
 
   if (state) checkQuery = checkQuery.eq("state", state);
@@ -66,11 +66,11 @@ export async function getRegionalStats(state?: string, provider?: string) {
 
   const { data: targets } = await targetQuery;
 
-  const timeWindowAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   let checkQuery = supabase
     .from("connectivity_checks")
     .select("ip, status, latency, timestamp")
-    .gt("timestamp", timeWindowAgo)
+    .gt("timestamp", fifteenMinutesAgo)
     .order("timestamp", { ascending: false });
 
   if (state) checkQuery = checkQuery.eq("state", state);
@@ -166,11 +166,11 @@ export async function getNodeComposition(state?: string, provider?: string) {
 
   const { data: targets } = await query;
 
-  const timeWindowAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   let checkQuery = supabase
     .from("connectivity_checks")
     .select("ip, status, latency")
-    .gt("timestamp", timeWindowAgo);
+    .gt("timestamp", fifteenMinutesAgo);
 
   if (state) checkQuery = checkQuery.eq("state", state);
   if (provider) checkQuery = checkQuery.eq("provider", provider);
@@ -249,11 +249,11 @@ export async function getMapData(state?: string, provider?: string) {
 
   const { data: targets } = await query;
 
-  const timeWindowAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   let checkQuery = supabase
     .from("connectivity_checks")
     .select("ip, status")
-    .gt("timestamp", timeWindowAgo)
+    .gt("timestamp", fifteenMinutesAgo)
     .order("timestamp", { ascending: false });
 
   if (state) checkQuery = checkQuery.eq("state", state);
