@@ -4,29 +4,46 @@ import type { NextConfig } from "next";
 
 const withNextIntl = createNextIntlPlugin();
 
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  // Configuración para optimizar imports y reducir el tamaño del bundle del servidor
+  // (particularmente las Serverless Functions de Vercel)
+  experimental: {
+    optimizePackageImports: [
+      "lucide-react",
+      "recharts",
+      "leaflet",
+      "react-leaflet",
+      "@supabase/supabase-js",
+      "@sentry/nextjs",
+    ],
+  },
+};
 
 export default withSentryConfig(withNextIntl(nextConfig), {
   org: "ache",
   project: "blackout",
 
-  // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
 
-  // Upload a larger set of source maps for prettier stack traces (increases build time)
+  // Detiene la subida de sourcemaps al cliente/sentry para aligerar la compilación
   widenClientFileUpload: false,
 
   sourcemaps: {
     disable: true,
   },
 
-  // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
+  // Descomentar esto puede incrementar el tamaño en el endpoint
   // tunnelRoute: "/monitoring",
-  webpack: {
-    automaticVercelMonitors: true,
 
-    treeshake: {
-      removeDebugLogging: true,
-    },
+  automaticVercelMonitors: true,
+
+  disableLogger: true,
+
+  // Agresiva eliminación de código de debug y Replay de Sentry para reducir KB
+  bundleSizeOptimizations: {
+    excludeDebugStatements: true,
+    excludeReplayIframe: true,
+    excludeReplayShadowDom: true,
+    excludeReplayWorker: true,
   },
 });

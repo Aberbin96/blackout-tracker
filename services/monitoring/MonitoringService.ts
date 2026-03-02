@@ -89,15 +89,19 @@ export class MonitoringService {
       await new Promise((r) => setTimeout(r, 400));
     }
 
-    // Store results in Supabase in the background
-    this.storeResults(results).catch((err) =>
-      console.error("Delayed Supabase storage failed:", err),
-    );
+    // Store results in Supabase before returning so Vercel does not terminate the function
+    try {
+      await this.storeResults(results);
+    } catch (err) {
+      console.error("Delayed Supabase storage failed:", err);
+    }
 
     // Process regional blackouts based on results
-    this.processBlackouts(results).catch((err) =>
-      console.error("Blackout processing failed:", err),
-    );
+    try {
+      await this.processBlackouts(results);
+    } catch (err) {
+      console.error("Blackout processing failed:", err);
+    }
 
     return results;
   }
