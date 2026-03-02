@@ -38,8 +38,9 @@ export async function getDashboardStats(state?: string, provider?: string) {
     }
   });
 
-  const availability = totalNodes
-    ? Math.round((onlineCount / totalNodes) * 100)
+  const checkedNodes = uniqueIps.size;
+  const availability = checkedNodes
+    ? Math.round((onlineCount / checkedNodes) * 100)
     : 0;
 
   const avgLatency = onlineCount ? Math.round(totalLatency / onlineCount) : 0;
@@ -96,15 +97,29 @@ export async function getRegionalStats(state?: string, provider?: string) {
         totalLatency: 0,
         city: t.city,
       };
-    regions[stateName].total++;
-    if (statusMap.get(t.ip) === "online") {
-      regions[stateName].online++;
-      regions[stateName].totalLatency += latencyMap.get(t.ip) || 0;
+
+    if (statusMap.has(t.ip)) {
+      regions[stateName].total++;
+      if (statusMap.get(t.ip) === "online") {
+        regions[stateName].online++;
+        regions[stateName].totalLatency += latencyMap.get(t.ip) || 0;
+      }
     }
   });
 
   return Object.entries(regions)
     .map(([state, data]: [string, any]) => {
+      if (data.total === 0) {
+        return {
+          location: `${state}${data.city ? " - " + data.city : ""}`,
+          availability: `N/A`,
+          status: "D. INSUFICIENTES",
+          lastSync: "> 15m",
+          color: "text-muted-foreground",
+          bg: "bg-secondary",
+        };
+      }
+
       const ratio = data.total > 0 ? data.online / data.total : 0;
       const avgLat = data.online > 0 ? data.totalLatency / data.online : 0;
       const SLOW_THRESHOLD = 1200;
@@ -175,10 +190,13 @@ export async function getNodeComposition(state?: string, provider?: string) {
   targets?.forEach((t) => {
     if (!providers[t.provider])
       providers[t.provider] = { total: 0, online: 0, totalLatency: 0 };
-    providers[t.provider].total++;
-    if (statusMap.get(t.ip) === "online") {
-      providers[t.provider].online++;
-      providers[t.provider].totalLatency += latencyMap.get(t.ip) || 0;
+
+    if (statusMap.has(t.ip)) {
+      providers[t.provider].total++;
+      if (statusMap.get(t.ip) === "online") {
+        providers[t.provider].online++;
+        providers[t.provider].totalLatency += latencyMap.get(t.ip) || 0;
+      }
     }
   });
 
@@ -255,7 +273,9 @@ export async function getMapData(state?: string, provider?: string) {
       lon: t.lon || 0,
       provider: t.provider,
       location: `${t.state} - ${t.city}`,
-      status: statusMap.get(t.ip) || "offline",
+      status: statusMap.has(t.ip)
+        ? statusMap.get(t.ip) || "offline"
+        : "unknown",
     })) || []
   );
 }

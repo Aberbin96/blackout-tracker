@@ -214,13 +214,14 @@ function getCandidates(prefix: string, aggressive: boolean = false): string[] {
   // SMART SAMPLING: Priority targets (Gateways, common offsets)
   const priorityOffsets = [1, 2, 5, 10, 25, 50, 69, 100, 150, 200, 254];
 
-  if (aggressive && mask >= 22) {
-    // FULL SCAN of prefixes up to /22 (1,024 IPs)
+  if (aggressive) {
+    // TRUE FULL SCAN: Generate 100% of IPs for the prefix
     const totalIps = Math.pow(2, 32 - mask);
     for (let i = 0; i < totalIps; i++) {
-      const b3 = Math.floor(i / 256);
+      const b2 = Math.floor(i / 65536);
+      const b3 = Math.floor((i % 65536) / 256);
       const b4 = i % 256;
-      candidates.push(`${parts[0]}.${parts[1]}.${parts[2] + b3}.${b4}`);
+      candidates.push(`${parts[0]}.${parts[1] + b2}.${parts[2] + b3}.${b4}`);
     }
   } else if (mask >= 24) {
     priorityOffsets.forEach((n) =>
@@ -228,7 +229,7 @@ function getCandidates(prefix: string, aggressive: boolean = false): string[] {
     );
   } else if (mask >= 16) {
     // Mid-range blocks (/23 to /16)
-    const count = aggressive ? 800 : 15; // Increased density for aggressive
+    const count = 15;
     const subBlocks = Array.from({ length: count }, (_, i) =>
       i < 64 ? i : Math.floor(Math.random() * Math.pow(2, 24 - mask)),
     );
@@ -241,7 +242,7 @@ function getCandidates(prefix: string, aggressive: boolean = false): string[] {
     });
   } else {
     // Large backbones (/15 and below) - e.g. CANTV
-    const count = aggressive ? 2500 : 40; // High density for backbone
+    const count = 40;
     for (let i = 0; i < count; i++) {
       const b2 = Math.floor(Math.random() * Math.pow(2, 24 - mask));
       const b3 = Math.floor(Math.random() * 256);
@@ -259,21 +260,40 @@ function getCandidates(prefix: string, aggressive: boolean = false): string[] {
 }
 
 async function main() {
-  const arg = process.argv[2]?.toUpperCase();
+  const providerArg = process.argv.find((a) => a.startsWith("--provider="));
+  let targetProviderName = providerArg
+    ? providerArg.substring(11).replace(/['"]/g, "").toUpperCase()
+    : undefined;
+
+  // Legacy fallback (positional argument)
+  if (!targetProviderName) {
+    const arg = process.argv[2]?.toUpperCase();
+    if (arg && !arg.startsWith("--")) {
+      targetProviderName = arg;
+    }
+  }
+
   const aggressive = process.argv.includes("--aggressive");
   const fullOnly = process.argv.includes("--full-only");
 
   let providersToScan = Object.entries(VENEZUELA_ISPS);
 
-  if (arg && !arg.startsWith("--")) {
-    if (VENEZUELA_ISPS[arg]) {
-      providersToScan = [[arg, VENEZUELA_ISPS[arg]]];
+  if (targetProviderName) {
+    // Find provider by key or by name, stripping spaces if matching by key
+    const foundEntry = Object.entries(VENEZUELA_ISPS).find(
+      ([key, info]) =>
+        key === targetProviderName?.replace(/\s+/g, "") ||
+        info.name.toUpperCase() === targetProviderName,
+    );
+
+    if (foundEntry) {
+      providersToScan = [foundEntry];
       console.log(
-        `--- Starting PROVIDER-SPECIFIC Discovery: ${arg} ${aggressive ? "(AGGRESSIVE)" : ""} ${fullOnly ? "(FULL-SCAN ONLY)" : ""} ---`,
+        `--- Starting PROVIDER-SPECIFIC Discovery: ${foundEntry[1].name} ${aggressive ? "(AGGRESSIVE)" : ""} ${fullOnly ? "(FULL-SCAN ONLY)" : ""} ---`,
       );
     } else {
       console.error(
-        `Error: Provider "${arg}" not found in constants/providers.ts`,
+        `Error: Provider "${targetProviderName}" not found in constants/providers.ts`,
       );
       process.exit(1);
     }

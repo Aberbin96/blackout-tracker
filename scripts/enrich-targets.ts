@@ -2,6 +2,7 @@ import axios from "axios";
 import path from "path";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+import dns from "dns/promises";
 import { classifyDevice, detectNetworkType } from "../utils/classifier";
 
 // Load environment variables
@@ -25,7 +26,17 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 async function getServiceMetadata(ip: string, port: number): Promise<any> {
   const metadata: any = {};
 
-  // 1. SSL Certificate Check (Port 443)
+  // 1. Reverse DNS (PTR) Lookup
+  try {
+    const hostnames = await dns.reverse(ip);
+    if (hostnames && hostnames.length > 0) {
+      metadata.ptr_record = hostnames[0];
+    }
+  } catch (e) {
+    /* ignore if it has no PTR record */
+  }
+
+  // 2. SSL Certificate Check (Port 443)
   if (port === 443) {
     try {
       const tls = await import("tls");
@@ -61,7 +72,7 @@ async function getServiceMetadata(ip: string, port: number): Promise<any> {
     }
   }
 
-  // 2. HTTP Title Check
+  // 3. HTTP Title & Auth Check
   if ([80, 443, 8080, 8081, 8888].includes(port)) {
     try {
       const protocol = port === 443 ? "https" : "http";
@@ -75,6 +86,9 @@ async function getServiceMetadata(ip: string, port: number): Promise<any> {
       }
       if (resp.headers.server) {
         metadata.http_server = resp.headers.server;
+      }
+      if (resp.headers["www-authenticate"]) {
+        metadata.http_auth = resp.headers["www-authenticate"];
       }
     } catch (e) {
       /* ignore */
