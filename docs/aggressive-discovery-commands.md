@@ -13,13 +13,13 @@ npx tsx scripts/discover-ips.ts --provider="Gandalf" --aggressive
 # Gold Data X
 npx tsx scripts/discover-ips.ts --provider="Gold Data" --aggressive
 
-# VNET
+# VNET X
 npx tsx scripts/discover-ips.ts --provider="VNET" --aggressive
 
-# Netcom Plus
+# Netcom Plus X
 npx tsx scripts/discover-ips.ts --provider="Netcom Plus" --aggressive
 
-# Fibex
+# Fibex X
 npx tsx scripts/discover-ips.ts --provider="Fibex" --aggressive
 
 # Thundernet (Gran crecimiento)

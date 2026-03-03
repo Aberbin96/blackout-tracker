@@ -1,208 +1,111 @@
 import { supabase } from "@/utils/supabase";
 
 export async function getDashboardStats(state?: string, provider?: string) {
-  let query = supabase
-    .from("monitoring_targets")
-    .select("*", { count: "exact", head: true })
-    .eq("is_active", true);
-
-  if (state) query = query.eq("state", state);
-  if (provider) query = query.eq("provider", provider);
-
-  const { count: totalNodes } = await query;
-
-  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-
-  let checkQuery = supabase
-    .from("connectivity_checks")
-    .select("ip, status, latency")
-    .gt("timestamp", fifteenMinutesAgo)
-    .order("timestamp", { ascending: false });
-
-  if (state) checkQuery = checkQuery.eq("state", state);
-  if (provider) checkQuery = checkQuery.eq("provider", provider);
-
-  const { data: recentChecks } = await checkQuery;
-
-  const uniqueIps = new Set();
-  let onlineCount = 0;
-  let totalLatency = 0;
-
-  recentChecks?.forEach((check) => {
-    if (!uniqueIps.has(check.ip)) {
-      uniqueIps.add(check.ip);
-      if (check.status === "online") {
-        onlineCount++;
-        totalLatency += (check as any).latency || 0;
-      }
-    }
+  const { data, error } = await supabase.rpc("get_dashboard_stats", {
+    p_state: state || null,
+    p_provider: provider || null,
   });
 
-  const checkedNodes = uniqueIps.size;
-  const availability = checkedNodes
-    ? Math.round((onlineCount / checkedNodes) * 100)
-    : 0;
+  if (error || !data || data.length === 0) {
+    console.error("Error fetching dashboard stats:", error);
+    return {
+      availability: 0,
+      activeSensors: 0,
+      onlineSensors: 0,
+      avgLatency: 0,
+      trend: "0%",
+    };
+  }
 
-  const avgLatency = onlineCount ? Math.round(totalLatency / onlineCount) : 0;
-  const SLOW_THRESHOLD = 1200; // ms
+  const result = data[0];
+  const availability =
+    result.total_nodes > 0
+      ? Math.round((result.online_nodes / result.total_nodes) * 100)
+      : 0;
 
   return {
     availability,
-    activeSensors: totalNodes || 0,
-    onlineSensors: onlineCount,
-    avgLatency,
-    trend: "-5.2%",
+    activeSensors: Number(result.total_nodes) || 0,
+    onlineSensors: Number(result.online_nodes) || 0,
+    avgLatency: Math.round(Number(result.avg_latency)) || 0,
+    trend: "-5.2%", // Static for now
   };
 }
 
 export async function getRegionalStats(state?: string, provider?: string) {
-  let targetQuery = supabase
-    .from("monitoring_targets")
-    .select("state, city, ip")
-    .eq("is_active", true);
-
-  if (state) targetQuery = targetQuery.eq("state", state);
-  if (provider) targetQuery = targetQuery.eq("provider", provider);
-
-  const { data: targets } = await targetQuery;
-
-  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-  let checkQuery = supabase
-    .from("connectivity_checks")
-    .select("ip, status, latency, timestamp")
-    .gt("timestamp", fifteenMinutesAgo)
-    .order("timestamp", { ascending: false });
-
-  if (state) checkQuery = checkQuery.eq("state", state);
-  if (provider) checkQuery = checkQuery.eq("provider", provider);
-
-  const { data: checks } = await checkQuery;
-
-  const statusMap = new Map();
-  const latencyMap = new Map();
-  checks?.forEach((c) => {
-    if (!statusMap.has(c.ip)) {
-      statusMap.set(c.ip, c.status);
-      latencyMap.set(c.ip, (c as any).latency || 0);
-    }
+  const { data: regions, error } = await supabase.rpc("get_regional_stats", {
+    p_state: state || null,
+    p_provider: provider || null,
   });
 
-  const regions: any = {};
-  targets?.forEach((t) => {
-    const stateName = t.state || "Unknown";
-    if (!regions[stateName])
-      regions[stateName] = {
-        total: 0,
-        online: 0,
-        totalLatency: 0,
-        city: t.city,
+  if (error || !regions) {
+    console.error("Error fetching regional stats:", error);
+    return [];
+  }
+
+  return regions.map((data: any) => {
+    const stateName = data.state || "Unknown";
+
+    if (data.total_nodes === 0) {
+      return {
+        location: `${stateName}${data.city ? " - " + data.city : ""}`,
+        availability: `N/A`,
+        status: "NO DISPONIBLE",
+        lastSync: "> 15m",
+        color: "text-muted-foreground",
+        bg: "bg-secondary",
       };
-
-    if (statusMap.has(t.ip)) {
-      regions[stateName].total++;
-      if (statusMap.get(t.ip) === "online") {
-        regions[stateName].online++;
-        regions[stateName].totalLatency += latencyMap.get(t.ip) || 0;
-      }
     }
-  });
 
-  return Object.entries(regions)
-    .map(([state, data]: [string, any]) => {
-      if (data.total === 0) {
-        return {
-          location: `${state}${data.city ? " - " + data.city : ""}`,
-          availability: `N/A`,
-          status: "D. INSUFICIENTES",
-          lastSync: "> 15m",
-          color: "text-muted-foreground",
-          bg: "bg-secondary",
-        };
-      }
+    const ratio =
+      data.total_nodes > 0 ? data.online_nodes / data.total_nodes : 0;
+    const SLOW_THRESHOLD = 1200;
 
-      const ratio = data.total > 0 ? data.online / data.total : 0;
-      const avgLat = data.online > 0 ? data.totalLatency / data.online : 0;
-      const SLOW_THRESHOLD = 1200;
+    let status = "BLACKOUT";
+    let color = "text-danger";
+    let bg = "bg-danger/10";
 
-      let status = "BLACKOUT";
-      let color = "text-danger";
-      let bg = "bg-danger/10";
-
-      if (ratio > 0.8) {
-        if (avgLat > SLOW_THRESHOLD) {
-          status = "SLOW";
-          color = "text-warning";
-          bg = "bg-warning/10";
-        } else {
-          status = "STABLE";
-          color = "text-success";
-          bg = "bg-success/10";
-        }
-      } else if (ratio > 0.3) {
-        status = "RATIONING";
+    if (ratio > 0.8) {
+      if (data.avg_latency > SLOW_THRESHOLD) {
+        status = "SLOW";
         color = "text-warning";
         bg = "bg-warning/10";
+      } else {
+        status = "STABLE";
+        color = "text-success";
+        bg = "bg-success/10";
       }
+    } else if (ratio > 0.3) {
+      status = "RATIONING";
+      color = "text-warning";
+      bg = "bg-warning/10";
+    }
 
-      return {
-        location: `${state}${data.city ? " - " + data.city : ""}`,
-        availability: `${Math.round(ratio * 100)}%`,
-        status,
-        lastSync: "Actualizado",
-        color,
-        bg,
-      };
-    })
-    .sort((a, b) => b.location.localeCompare(a.location));
+    return {
+      location: `${stateName}${data.city ? " - " + data.city : ""}`,
+      availability: `${Math.round(ratio * 100)}%`,
+      status,
+      lastSync: "Actualizado",
+      color,
+      bg,
+    };
+  });
 }
 
 export async function getNodeComposition(state?: string, provider?: string) {
-  let query = supabase
-    .from("monitoring_targets")
-    .select("provider, ip")
-    .eq("is_active", true);
-  if (state) query = query.eq("state", state);
-  if (provider) query = query.eq("provider", provider);
-
-  const { data: targets } = await query;
-
-  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-  let checkQuery = supabase
-    .from("connectivity_checks")
-    .select("ip, status, latency")
-    .gt("timestamp", fifteenMinutesAgo);
-
-  if (state) checkQuery = checkQuery.eq("state", state);
-  if (provider) checkQuery = checkQuery.eq("provider", provider);
-
-  const { data: checks } = await checkQuery;
-
-  const statusMap = new Map();
-  const latencyMap = new Map();
-  checks?.forEach((c) => {
-    if (!statusMap.has(c.ip)) {
-      statusMap.set(c.ip, c.status);
-      latencyMap.set(c.ip, (c as any).latency || 0);
-    }
+  const { data: providers, error } = await supabase.rpc("get_provider_stats", {
+    p_state: state || null,
+    p_provider: provider || null,
   });
 
-  const providers: any = {};
-  targets?.forEach((t) => {
-    if (!providers[t.provider])
-      providers[t.provider] = { total: 0, online: 0, totalLatency: 0 };
+  if (error || !providers) {
+    console.error("Error fetching provider stats:", error);
+    return [];
+  }
 
-    if (statusMap.has(t.ip)) {
-      providers[t.provider].total++;
-      if (statusMap.get(t.ip) === "online") {
-        providers[t.provider].online++;
-        providers[t.provider].totalLatency += latencyMap.get(t.ip) || 0;
-      }
-    }
-  });
-
-  return Object.entries(providers).map(([name, data]: [string, any]) => {
-    const ratio = data.total > 0 ? data.online / data.total : 0;
-    const avgLat = data.online > 0 ? data.totalLatency / data.online : 0;
+  return providers.map((data: any) => {
+    const ratio =
+      data.total_nodes > 0 ? data.online_nodes / data.total_nodes : 0;
     const SLOW_THRESHOLD = 1200;
 
     let status = "Massive Failure";
@@ -210,7 +113,7 @@ export async function getNodeComposition(state?: string, provider?: string) {
     let textColor = "text-danger";
 
     if (ratio > 0.8) {
-      if (avgLat > SLOW_THRESHOLD) {
+      if (data.avg_latency > SLOW_THRESHOLD) {
         status = "Degraded (Slow)";
         color = "bg-warning";
         textColor = "text-warning";
@@ -226,9 +129,9 @@ export async function getNodeComposition(state?: string, provider?: string) {
     }
 
     return {
-      name,
-      total: data.total,
-      online: data.online,
+      name: data.provider,
+      total: data.total_nodes,
+      online: data.online_nodes,
       status,
       color,
       textColor,
@@ -238,53 +141,32 @@ export async function getNodeComposition(state?: string, provider?: string) {
 }
 
 export async function getMapData(state?: string, provider?: string) {
-  let query = supabase
-    .from("monitoring_targets")
-    .select("ip, lat, lon, provider, state, city")
-    .eq("is_active", true)
-    .not("lat", "is", null);
-
-  if (state) query = query.eq("state", state);
-  if (provider) query = query.eq("provider", provider);
-
-  const { data: targets } = await query;
-
-  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-  let checkQuery = supabase
-    .from("connectivity_checks")
-    .select("ip, status")
-    .gt("timestamp", fifteenMinutesAgo)
-    .order("timestamp", { ascending: false });
-
-  if (state) checkQuery = checkQuery.eq("state", state);
-  if (provider) checkQuery = checkQuery.eq("provider", provider);
-
-  const { data: checks } = await checkQuery;
-
-  const statusMap = new Map();
-  checks?.forEach((c) => {
-    if (!statusMap.has(c.ip)) statusMap.set(c.ip, c.status);
+  const { data, error } = await supabase.rpc("get_map_data", {
+    p_state: state || null,
+    p_provider: provider || null,
   });
 
-  return (
-    targets?.map((t) => ({
-      ip: t.ip,
-      lat: t.lat || 0,
-      lon: t.lon || 0,
-      provider: t.provider,
-      location: `${t.state} - ${t.city}`,
-      status: statusMap.has(t.ip)
-        ? statusMap.get(t.ip) || "offline"
-        : "unknown",
-    })) || []
-  );
+  if (error) {
+    console.error("Error fetching map data:", error);
+    return [];
+  }
+
+  return data.map((t: any) => ({
+    ip: t.ip,
+    lat: t.lat || 0,
+    lon: t.lon || 0,
+    provider: t.provider,
+    location: `${t.state} - ${t.city}`,
+    status: t.status,
+  }));
 }
 
 export async function getFiltersData() {
   const { data: targets } = await supabase
     .from("monitoring_targets")
     .select("state, provider")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .limit(50000);
 
   const states = Array.from(
     new Set(targets?.map((t) => t.state).filter(Boolean)),
@@ -305,7 +187,8 @@ export async function getHistoricalStats(state?: string, provider?: string) {
     .from("connectivity_checks")
     .select("timestamp, status")
     .gt("timestamp", sevenDaysAgo)
-    .order("timestamp", { ascending: true });
+    .order("timestamp", { ascending: true })
+    .limit(500000);
 
   if (state) query = query.eq("state", state);
   if (provider) query = query.eq("provider", provider);

@@ -49,7 +49,7 @@ export function RegionalTable({ data }: Props) {
                 </td>
                 <td className="px-6 py-4">
                   <span
-                    className={`px-3 py-1 rounded-full ${region.bg} ${region.color} text-[10px] font-black uppercase tracking-tighter`}
+                    className={`px-3 py-1 rounded-full ${region.bg} ${region.color} text-[10px] font-black uppercase tracking-tighter whitespace-nowrap`}
                   >
                     {region.status}
                   </span>

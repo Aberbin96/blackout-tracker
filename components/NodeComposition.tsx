@@ -36,10 +36,10 @@ export function NodeComposition({ data }: Props) {
                 </span>
                 <span className={`${p.textColor} flex items-center gap-1`}>
                   <div
-                    className={`size-1.5 rounded-full ${p.status === "Operational" ? "bg-success" : "bg-warning"} animate-pulse`}
+                    className={`size-1.5 rounded-full ${p.status === "Stable" ? "bg-success" : p.status.includes("Degraded") || p.status.includes("Partial") ? "bg-warning" : "bg-danger"} animate-pulse`}
                   ></div>
                   {t(
-                    `status.${p.status === "Operational" ? "operational" : "unknown"}`,
+                    `status.${p.status === "Stable" ? "operational" : p.status.includes("Degraded") || p.status.includes("Partial") ? "degraded" : "outage"}`,
                   )}
                 </span>
               </div>

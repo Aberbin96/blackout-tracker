@@ -1,14 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  MapContainer,
-  TileLayer,
-  CircleMarker,
-  Popup,
-  useMap,
-} from "react-leaflet";
+import { MapContainer, TileLayer, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
 
 interface NodeData {
@@ -70,42 +64,36 @@ export default function MapView({ data }: MapViewProps) {
         className="h-full w-full"
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
         />
         <MapResizer />
 
         {data.map((node, idx) => (
-          <CircleMarker
-            key={`${node.ip}-${idx}`}
-            center={[node.lat, node.lon]}
-            radius={node.status === "online" ? 5 : 4}
-            pathOptions={{
-              fillColor: node.status === "online" ? "#10b981" : "#ef4444",
-              color: "#ffffff",
-              weight: 2,
-              opacity: 1,
-              fillOpacity: 0.9,
-            }}
-          >
-            <Popup>
-              <div className="p-1">
-                <p className="font-bold text-xs mb-1">{node.provider}</p>
-                <div className="flex items-center gap-2 mb-2">
-                  <div
-                    className={`size-2 rounded-full ${node.status === "online" ? "bg-success" : "bg-danger"}`}
-                  ></div>
-                  <span className="text-[10px] font-bold uppercase">
-                    {t(
-                      `status.${node.status === "online" ? "operational" : "outage"}`,
-                    )}
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-500">{node.location}</p>
-                <p className="text-[10px] text-primary mt-1">{node.ip}</p>
-              </div>
-            </Popup>
-          </CircleMarker>
+          <Fragment key={`${node.ip}-${idx}`}>
+            {node.status === "online" && (
+              <CircleMarker
+                center={[node.lat, node.lon]}
+                radius={8}
+                pathOptions={{
+                  fillColor: "#10b981",
+                  color: "transparent",
+                  fillOpacity: 0.2,
+                }}
+              />
+            )}
+            <CircleMarker
+              center={[node.lat, node.lon]}
+              radius={node.status === "online" ? 5 : 4}
+              pathOptions={{
+                fillColor: node.status === "online" ? "#10b981" : "#ef4444",
+                color: "#ffffff",
+                weight: 1.5,
+                opacity: 1,
+                fillOpacity: 1,
+              }}
+            />
+          </Fragment>
         ))}
       </MapContainer>
     </div>

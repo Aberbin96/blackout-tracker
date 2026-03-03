@@ -12,6 +12,7 @@
         "status": {
             "live": "LIVE",
             "operational": "Operational",
+            "degraded": "Degraded",
             "outage": "Outage",
             "unknown": "Unknown"
         },
