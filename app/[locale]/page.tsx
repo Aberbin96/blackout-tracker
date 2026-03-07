@@ -14,17 +14,7 @@ import {
   getHistoricalStats,
   getActiveBlackouts,
 } from "@/services/stats";
-
-const HistoricalCharts = nextDynamic(
-  () =>
-    import("@/components/HistoricalCharts").then((mod) => mod.HistoricalCharts),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-[300px] w-full bg-slate-100 dark:bg-slate-800 animate-pulse rounded-xl" />
-    ),
-  },
-);
+import { HistoricalChartsWrapper as HistoricalCharts } from "@/components/wrappers/HistoricalChartsWrapper";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 600;
