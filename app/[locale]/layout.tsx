@@ -34,7 +34,7 @@ export async function generateMetadata({
       description: t("description"),
       type: "website",
       locale: locale,
-      siteName: "Radar de Vuelos Venezuela",
+      siteName: "Vzla Blackout Tracker",
       images: [
         {
           url: "/opengraph-image.png",

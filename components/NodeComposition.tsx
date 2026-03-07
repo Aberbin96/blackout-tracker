@@ -66,8 +66,8 @@ export function NodeComposition({ data }: Props) {
           )}
         </div>
 
-        <div className="mt-10 pt-6 border-t border-white/5 bg-white/5 -mx-6 -mb-6 p-6 rounded-b-2xl">
-          <h4 className="text-[10px] font-black text-slate-400 mb-4 uppercase tracking-[0.2em]">
+        <div className="mt-10 pt-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-white/5 -mx-6 -mb-6 p-6 rounded-b-2xl">
+          <h4 className="text-[10px] font-black text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-[0.2em]">
             {t("sidebar.config")}
           </h4>
           <div className="flex flex-wrap gap-5 items-center">

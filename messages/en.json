@@ -67,5 +67,11 @@
             "blackout": "Blackout Duration",
             "rationing": "Rationing Active"
         }
+    },
+    "Share": {
+        "button": "Share Status",
+        "twitter": "Share",
+        "whatsapp": "Send",
+        "text": "Check out the Vzla Blackout Tracker for real-time electrical grid status:"
     }
 }

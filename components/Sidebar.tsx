@@ -72,7 +72,7 @@ export function Sidebar({
       <aside
         className={`
           fixed inset-y-0 left-0 z-50 w-64 h-[100dvh] 
-          border-r border-white/10 glass-card rounded-none p-5 flex flex-col gap-8
+          border-r border-slate-200 dark:border-white/10 glass-card rounded-none p-5 flex flex-col gap-8
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
           lg:translate-x-0 lg:static lg:block lg:sticky lg:h-[calc(100vh-80px)]
@@ -93,7 +93,7 @@ export function Sidebar({
               <select
                 value={activeState}
                 onChange={(e) => handleFilterChange("state", e.target.value)}
-                className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-accent transition-all appearance-none cursor-pointer pr-10"
+                className="w-full bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border border-slate-200 dark:border-white/10 text-primary dark:text-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-accent transition-all appearance-none cursor-pointer pr-10"
               >
                 <option value="">{t("sidebar.allRegions")}</option>
                 {states.map((s) => (
@@ -117,7 +117,7 @@ export function Sidebar({
               <select
                 value={activeProvider}
                 onChange={(e) => handleFilterChange("provider", e.target.value)}
-                className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-accent transition-all appearance-none cursor-pointer pr-10"
+                className="w-full bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border border-slate-200 dark:border-white/10 text-primary dark:text-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-accent transition-all appearance-none cursor-pointer pr-10"
               >
                 <option value="">{t("sidebar.allCarriers")}</option>
                 {providers.map((p) => (
@@ -132,19 +132,10 @@ export function Sidebar({
               />
             </div>
           </div>
-
-          {(activeState || activeProvider) && (
-            <button
-              onClick={() => replace(pathname)}
-              className="w-full py-2.5 text-[10px] font-black text-danger uppercase hover:bg-danger/10 rounded-xl transition-all border border-dashed border-danger/40 bg-danger/5"
-            >
-              {t("sidebar.reset")}
-            </button>
-          )}
         </div>
 
         {activeBlackouts.length > 0 && (
-          <div className="mt-auto pt-6 border-t border-white/5">
+          <div className="mt-auto pt-6 border-t border-slate-200 dark:border-white/5">
             <h3 className="text-[10px] font-black text-danger flex items-center gap-2 mb-4 uppercase tracking-[.2em]">
               <div className="size-2 rounded-full bg-danger animate-ping"></div>
               {t("sidebar.critical") || "ZONA CRÍTICA"}

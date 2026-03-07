@@ -67,5 +67,10 @@
             "blackout": "Duración del Apagón",
             "rationing": "Racionamiento Activo"
         }
+    },
+    "Share": {
+        "button": "Compartir",
+        "whatsapp": "Enviar",
+        "text": "Revisa el estado de la red eléctrica en tiempo real con el Vzla Blackout Tracker:"
     }
 }

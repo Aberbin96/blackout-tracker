@@ -1,9 +1,4 @@
 import { createClient } from "@supabase/supabase-js";
-import * as dotenv from "dotenv";
-import path from "path";
-
-// Load .env.local for scripts
-dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;

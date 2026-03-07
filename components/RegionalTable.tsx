@@ -21,7 +21,7 @@ export function RegionalTable({ data }: Props) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase text-[10px] font-black tracking-widest">
+          <thead className="bg-primary/5 dark:bg-slate-800/50 text-primary dark:text-slate-400 uppercase text-[10px] font-black tracking-widest border-b border-primary/10 dark:border-white/5">
             <tr>
               <th className="px-6 py-4 font-black">{t("table.region")}</th>
               <th className="px-6 py-4 font-black">
@@ -49,8 +49,8 @@ export function RegionalTable({ data }: Props) {
                       text-sm transition-colors
                       ${
                         region.isState
-                          ? "font-black uppercase tracking-tight text-slate-900 dark:text-white"
-                          : "font-medium text-slate-500 dark:text-slate-400 italic pl-4"
+                          ? "font-black uppercase tracking-tight text-slate-800 dark:text-slate-100"
+                          : "font-medium text-slate-600 dark:text-slate-400 italic pl-4"
                       }
                     `}
                     >
