@@ -67,11 +67,11 @@ export function RegionalTable({ data }: Props) {
                   <span
                     className={`px-3 py-1 rounded-full ${region.bg} ${region.color} text-[10px] font-black uppercase tracking-tighter whitespace-nowrap`}
                   >
-                    {region.status}
+                    {t(region.status as any)}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-[10px] text-slate-400 font-bold uppercase text-right">
-                  {region.lastSync}
+                  {t(region.lastSync as any)}
                 </td>
               </tr>
             ))}

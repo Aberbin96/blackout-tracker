@@ -29,12 +29,10 @@ export function Header() {
         </div>
         <div>
           <h2 className="text-lg font-black leading-tight tracking-tight uppercase italic flex items-center gap-2 text-primary dark:text-slate-100">
-            Vzla{" "}
-            <span className="text-secondary dark:text-accent">Blackout</span>{" "}
-            Tracker
+            {t("title")}
           </h2>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            Experimental Monitoring System
+            {t("experimental")}
           </p>
         </div>
       </div>

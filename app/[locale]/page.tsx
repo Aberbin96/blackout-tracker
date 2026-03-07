@@ -2,9 +2,20 @@ import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { DashboardStats } from "@/components/DashboardStats";
 import { RegionalTable } from "@/components/RegionalTable";
+import nextDynamic from "next/dynamic";
 import { NodeComposition } from "@/components/NodeComposition";
-import { HistoricalCharts } from "@/components/HistoricalCharts";
 import { MapWrapper } from "@/components/MapWrapper";
+
+const HistoricalCharts = nextDynamic(
+  () =>
+    import("@/components/HistoricalCharts").then((mod) => mod.HistoricalCharts),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[300px] w-full bg-slate-100 dark:bg-slate-800 animate-pulse rounded-xl" />
+    ),
+  },
+);
 import {
   getDashboardStats,
   getRegionalStats,

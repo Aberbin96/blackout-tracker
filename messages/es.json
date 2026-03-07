@@ -13,8 +13,10 @@
             "live": "EN VIVO",
             "operational": "Operacional",
             "degraded": "Degradado",
-            "outage": "Apagón",
-            "unknown": "Desconocido"
+            "outage": "Falla Masiva",
+            "unknown": "Desconocido",
+            "slow": "Degradado (Lento)",
+            "rationing": "Racionamiento"
         },
         "stats": {
             "availability": "Disponibilidad Nacional",
@@ -38,7 +40,10 @@
             "availability": "Disponibilidad",
             "status": "Estado",
             "sync": "Última Sincro",
-            "empty": "No hay datos regionales disponibles. Por favor, corre el escáner de red."
+            "empty": "No hay datos regionales disponibles. Por favor, corre el escáner de red.",
+            "updated": "Actualizado",
+            "activeAlert": "Alerta Activa",
+            "notAvailable": "No Disponible"
         },
         "charts": {
             "title": "Analítica Histórica",

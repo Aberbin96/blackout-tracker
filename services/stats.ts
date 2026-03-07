@@ -71,22 +71,22 @@ export async function getRegionalStats(state?: string, provider?: string) {
     const avgLatency = stats.count > 0 ? stats.latency_sum / stats.count : 0;
     const SLOW_THRESHOLD = 1200;
 
-    let status = "BLACKOUT";
+    let status = "status.outage";
     let color = "text-danger";
     let bg = "bg-danger/10";
 
     if (ratio > 0.8) {
       if (avgLatency > SLOW_THRESHOLD) {
-        status = "SLOW";
+        status = "status.slow";
         color = "text-warning";
         bg = "bg-warning/10";
       } else {
-        status = "STABLE";
+        status = "status.operational";
         color = "text-success";
         bg = "bg-success/10";
       }
     } else if (ratio > 0.3) {
-      status = "RATIONING";
+      status = "status.rationing";
       color = "text-warning";
       bg = "bg-warning/10";
     }
@@ -94,8 +94,8 @@ export async function getRegionalStats(state?: string, provider?: string) {
     formattedStats.push({
       location: stateName,
       availability: stats.total === 0 ? "N/A" : `${Math.round(ratio * 100)}%`,
-      status: stats.total === 0 ? "NO DISPONIBLE" : status,
-      lastSync: "Actualizado",
+      status: stats.total === 0 ? "table.notAvailable" : status,
+      lastSync: "table.updated",
       color: stats.total === 0 ? "text-muted-foreground" : color,
       bg: stats.total === 0 ? "bg-secondary" : bg,
       isState: true,
@@ -113,22 +113,22 @@ export async function getRegionalStats(state?: string, provider?: string) {
         data.total_nodes > 0 ? data.online_nodes / data.total_nodes : 0;
       const SLOW_THRESHOLD = 1200;
 
-      let status = "BLACKOUT";
+      let status = "status.outage";
       let color = "text-danger";
       let bg = "bg-danger/10";
 
       if (ratio > 0.8) {
         if (data.avg_latency > SLOW_THRESHOLD) {
-          status = "SLOW";
+          status = "status.slow";
           color = "text-warning";
           bg = "bg-warning/10";
         } else {
-          status = "STABLE";
+          status = "status.operational";
           color = "text-success";
           bg = "bg-success/10";
         }
       } else if (ratio > 0.3) {
-        status = "RATIONING";
+        status = "status.rationing";
         color = "text-warning";
         bg = "bg-warning/10";
       }
@@ -137,8 +137,8 @@ export async function getRegionalStats(state?: string, provider?: string) {
         location: `${data.state} - ${data.city}`,
         availability:
           data.total_nodes === 0 ? "N/A" : `${Math.round(ratio * 100)}%`,
-        status: data.total_nodes === 0 ? "NO DISPONIBLE" : status,
-        lastSync: "Alerta Activa",
+        status: data.total_nodes === 0 ? "table.notAvailable" : status,
+        lastSync: "table.activeAlert",
         color: data.total_nodes === 0 ? "text-muted-foreground" : color,
         bg: data.total_nodes === 0 ? "bg-secondary" : bg,
         isAlert: true,
@@ -169,22 +169,22 @@ export async function getNodeComposition(state?: string, provider?: string) {
       data.total_nodes > 0 ? data.online_nodes / data.total_nodes : 0;
     const SLOW_THRESHOLD = 1200;
 
-    let status = "Massive Failure";
+    let status = "status.outage";
     let color = "bg-danger";
     let textColor = "text-danger";
 
     if (ratio > 0.8) {
       if (data.avg_latency > SLOW_THRESHOLD) {
-        status = "Degraded (Slow)";
+        status = "status.slow";
         color = "bg-warning";
         textColor = "text-warning";
       } else {
-        status = "Stable";
+        status = "status.operational";
         color = "bg-success";
         textColor = "text-success";
       }
     } else if (ratio > 0.3) {
-      status = "Partial Outage";
+      status = "status.degraded";
       color = "bg-warning";
       textColor = "text-warning";
     }

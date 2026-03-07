@@ -13,8 +13,10 @@
             "live": "LIVE",
             "operational": "Operational",
             "degraded": "Degraded",
-            "outage": "Outage",
-            "unknown": "Unknown"
+            "outage": "Massive Outage",
+            "unknown": "Unknown",
+            "slow": "Degraded (Slow)",
+            "rationing": "Rationing"
         },
         "stats": {
             "availability": "National Availability",
@@ -38,7 +40,10 @@
             "availability": "Availability",
             "status": "Status",
             "sync": "Last Sync",
-            "empty": "No regional data available. Please run the network scanner."
+            "empty": "No regional data available. Please run the network scanner.",
+            "updated": "Updated Now",
+            "activeAlert": "Active Alert",
+            "notAvailable": "Unavailable"
         },
         "charts": {
             "title": "Historical Analytics",

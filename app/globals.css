@@ -20,7 +20,7 @@
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
 
-  --font-display: "Inter", system-ui, sans-serif;
+  --font-display: var(--font-inter, "Inter", system-ui, sans-serif);
 }
 
 .dark {

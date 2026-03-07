@@ -36,11 +36,9 @@ export function NodeComposition({ data }: Props) {
                 </span>
                 <span className={`${p.textColor} flex items-center gap-1`}>
                   <div
-                    className={`size-1.5 rounded-full ${p.status === "Stable" ? "bg-success" : p.status.includes("Degraded") || p.status.includes("Partial") ? "bg-warning" : "bg-danger"} animate-pulse`}
+                    className={`size-1.5 rounded-full ${p.status === "status.operational" ? "bg-success" : p.status.includes("degraded") || p.status.includes("slow") ? "bg-warning" : "bg-danger"} animate-pulse`}
                   ></div>
-                  {t(
-                    `status.${p.status === "Stable" ? "operational" : p.status.includes("Degraded") || p.status.includes("Partial") ? "degraded" : "outage"}`,
-                  )}
+                  {t(p.status as any)}
                 </span>
               </div>
               <div className="w-full bg-slate-100 dark:bg-slate-800/50 h-2.5 rounded-full overflow-hidden shadow-inner">
