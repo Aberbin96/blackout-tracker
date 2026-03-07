@@ -31,10 +31,10 @@ export function LanguageSwitcher() {
     <button
       onClick={toggleLanguage}
       disabled={isPending}
-      className="flex items-center gap-2 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 border border-zinc-200 dark:border-zinc-800 px-3 py-2 rounded-md font-medium text-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+      className="flex items-center gap-2 h-10 px-4 glass-card bg-secondary/5 text-secondary dark:text-accent hover:bg-secondary/10 transition-all duration-200 rounded-xl font-black text-[11px] uppercase tracking-wider disabled:opacity-50"
     >
-      <Globe className="w-4 h-4" />
-      {locale === "en" ? "ES" : "EN"}
+      <Globe className="w-3.5 h-3.5" />
+      <span>{locale.toUpperCase()}</span>
     </button>
   );
 }

@@ -1,20 +1,13 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useLocale } from "next-intl";
-import { useRouter, usePathname } from "next/navigation";
-import { useTransition, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
-import { Button } from "./atoms/Button";
 import { Icon } from "./atoms/Icon";
-import { Tooltip } from "./atoms/Tooltip";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 
 export function Header() {
   const t = useTranslations("Dashboard");
-  const locale = useLocale();
-  const router = useRouter();
-  const pathname = usePathname();
-  const [, startTransition] = useTransition();
   const [mounted, setMounted] = useState(false);
   const { setTheme, resolvedTheme } = useTheme();
 
@@ -24,19 +17,6 @@ export function Header() {
 
   const toggleTheme = () => {
     setTheme(resolvedTheme === "dark" ? "light" : "dark");
-  };
-
-  const toggleLanguage = () => {
-    const nextLocale = locale === "en" ? "es" : "en";
-    startTransition(() => {
-      if (!pathname) return;
-      const segments = pathname.split("/");
-      if (segments.length > 1) {
-        segments[1] = nextLocale;
-      }
-      const newPath = segments.join("/") || `/${nextLocale}`;
-      router.replace(newPath);
-    });
   };
 
   const handleShare = () => {
@@ -86,12 +66,7 @@ export function Header() {
             />
           </button>
 
-          <button
-            onClick={toggleLanguage}
-            className="flex items-center justify-center rounded-xl h-10 w-10 glass-card bg-secondary/5 text-secondary dark:text-accent hover:bg-secondary/10 transition-all duration-200"
-          >
-            <Icon name="translate" />
-          </button>
+          <LanguageSwitcher />
 
           <button
             onClick={handleShare}

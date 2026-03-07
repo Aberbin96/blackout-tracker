@@ -12,9 +12,9 @@ export type DeviceType =
   | "unknown";
 
 export function classifyDevice(metadata: any): DeviceType {
-  const title = (metadata.http_title || "").toLowerCase();
-  const server = (metadata.http_server || "").toLowerCase();
-  const sslCN = (metadata.ssl_subject || "").toLowerCase();
+  const title = String(metadata.http_title || "").toLowerCase();
+  const server = String(metadata.http_server || "").toLowerCase();
+  const sslCN = String(metadata.ssl_subject || "").toLowerCase();
 
   // 0. ISP Infrastructure (High Confidence)
   if (

@@ -3,7 +3,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { MapContainer, TileLayer, CircleMarker, useMap } from "react-leaflet";
-import L from "leaflet";
 
 interface NodeData {
   ip: string;
@@ -62,6 +61,7 @@ export default function MapView({ data }: MapViewProps) {
         zoom={6}
         scrollWheelZoom={false}
         className="h-full w-full"
+        preferCanvas={true}
       >
         <TileLayer
           attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'

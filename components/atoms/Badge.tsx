@@ -1,5 +1,3 @@
-import React from "react";
-
 export type BadgeVariant = "success" | "warning" | "error" | "neutral";
 
 interface BadgeProps {

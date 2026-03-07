@@ -22,22 +22,22 @@ npx tsx scripts/discover-ips.ts --provider="Netcom Plus" --aggressive
 # Fibex X
 npx tsx scripts/discover-ips.ts --provider="Fibex" --aggressive
 
-# Thundernet (Gran crecimiento)
+# Thundernet (Gran crecimiento) X
 npx tsx scripts/discover-ips.ts --provider="Thundernet" --aggressive
 
-# Airtek (Gran volumen en Zulia)
+# Airtek (Gran volumen en Zulia) X
 npx tsx scripts/discover-ips.ts --provider="Airtek" --aggressive
 
-# Net Uno (Nacional Mediano)
+# Net Uno (Nacional Mediano) X
 npx tsx scripts/discover-ips.ts --provider="Net Uno" --aggressive
 
-# Inter (Nacional Grande)
+# Inter (Nacional Grande) X
 npx tsx scripts/discover-ips.ts --provider="Inter" --aggressive
 
-# Movistar (Móvil y Fijo Nacional)
+# Movistar (Móvil y Fijo Nacional) X
 npx tsx scripts/discover-ips.ts --provider="Movistar" --aggressive
 
-# Digitel (Móvil y Fijo Nacional)
+# Digitel (Móvil y Fijo Nacional) X
 npx tsx scripts/discover-ips.ts --provider="Digitel" --aggressive
 
 # CANTV (El gigante estatal)

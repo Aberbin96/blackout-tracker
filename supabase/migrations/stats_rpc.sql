@@ -110,8 +110,8 @@ BEGIN
   )
   SELECT 
     t.ip,
-    t.lat,
-    t.lon,
+    t.lat::FLOAT,
+    t.lon::FLOAT,
     t.provider,
     t.state,
     t.city,

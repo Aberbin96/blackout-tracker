@@ -39,8 +39,24 @@ export function RegionalTable({ data }: Props) {
                 key={idx}
                 className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors group"
               >
-                <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300 group-hover:text-secondary transition-colors italic">
-                  {region.location}
+                <td className="px-6 py-4 transition-colors">
+                  <div className="flex items-center gap-2">
+                    {region.isAlert && (
+                      <div className="size-1.5 rounded-full bg-danger animate-pulse shrink-0" />
+                    )}
+                    <span
+                      className={`
+                      text-sm transition-colors
+                      ${
+                        region.isState
+                          ? "font-black uppercase tracking-tight text-slate-900 dark:text-white"
+                          : "font-medium text-slate-500 dark:text-slate-400 italic pl-4"
+                      }
+                    `}
+                    >
+                      {region.location}
+                    </span>
+                  </div>
                 </td>
                 <td
                   className={`px-6 py-4 font-black text-base ${region.color}`}

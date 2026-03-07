@@ -322,17 +322,29 @@ async function main() {
       );
     }
 
+    const { data: scannedData } = await supabase
+      .from("scanned_prefixes")
+      .select("prefix")
+      .eq("asn", asn);
+    const scannedSet = new Set(scannedData?.map((d) => d.prefix) || []);
+
+    const unscannedPrefixes = prefixes.filter((p) => !scannedSet.has(p));
+
     console.log(
-      `  Processing ${prefixes.length} prefixes in parallel batches...`,
+      `  [${providerName}] Segmentos faltantes: ${unscannedPrefixes.length} (Ya escaneados: ${scannedSet.size})`,
+    );
+    console.log(
+      `  Processing ${unscannedPrefixes.length} remaining prefixes in parallel batches...`,
     );
 
     const PREFIX_BATCH_SIZE = 2; // Reduced to 2 to avoid overwhelming the network
-    for (let i = 0; i < prefixes.length; i += PREFIX_BATCH_SIZE) {
-      const batch = prefixes.slice(i, i + PREFIX_BATCH_SIZE);
+    for (let i = 0; i < unscannedPrefixes.length; i += PREFIX_BATCH_SIZE) {
+      const batch = unscannedPrefixes.slice(i, i + PREFIX_BATCH_SIZE);
 
       await Promise.all(
         batch.map(async (prefix, batchIdx) => {
           const globalIdx = i + batchIdx + 1;
+          const remainingSegments = unscannedPrefixes.length - globalIdx;
 
           if (await isPrefixScanned(prefix)) {
             // Uncomment for deep debugging:
@@ -342,7 +354,7 @@ async function main() {
 
           const candidates = getCandidates(prefix, aggressive);
           process.stdout.write(
-            `\n  [${globalIdx}/${prefixes.length}] [${providerName}] Scanning ${prefix} (${candidates.length} IPs)... `,
+            `\n  [Faltan: ${remainingSegments} segmentos] [${globalIdx}/${unscannedPrefixes.length}] [${providerName}] Scanning ${prefix} (${candidates.length} IPs)... `,
           );
 
           const aliveResults = [];
