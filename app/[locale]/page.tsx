@@ -5,6 +5,15 @@ import { RegionalTable } from "@/components/RegionalTable";
 import nextDynamic from "next/dynamic";
 import { NodeComposition } from "@/components/NodeComposition";
 import { MapWrapper } from "@/components/MapWrapper";
+import {
+  getDashboardStats,
+  getRegionalStats,
+  getNodeComposition,
+  getMapData,
+  getFiltersData,
+  getHistoricalStats,
+  getActiveBlackouts,
+} from "@/services/stats";
 
 const HistoricalCharts = nextDynamic(
   () =>
@@ -16,15 +25,6 @@ const HistoricalCharts = nextDynamic(
     ),
   },
 );
-import {
-  getDashboardStats,
-  getRegionalStats,
-  getNodeComposition,
-  getMapData,
-  getFiltersData,
-  getHistoricalStats,
-  getActiveBlackouts,
-} from "@/services/stats";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 600;
