@@ -12,8 +12,14 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 const apiUrl = process.env.API_CHECK_URL;
 const cronSecret = process.env.CRON_SECRET;
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error("Error: Supabase credentials not found");
+if (!supabaseUrl) {
+  console.error("Error: NEXT_PUBLIC_SUPABASE_URL is missing");
+  process.exit(1);
+}
+if (!supabaseKey) {
+  console.error(
+    "Error: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY (or SUPABASE_KEY) is missing",
+  );
   process.exit(1);
 }
 
@@ -36,15 +42,19 @@ interface CheckResult {
   timestamp: string;
 }
 
-async function checkIp(target: Target, timestamp: string): Promise<CheckResult> {
+async function checkIp(
+  target: Target,
+  timestamp: string,
+): Promise<CheckResult> {
   const startTime = Date.now();
-  const portsToTry = target.services?.length > 0 ? target.services : [80, 443, 8291];
-  
+  const portsToTry =
+    target.services?.length > 0 ? target.services : [80, 443, 8291];
+
   let status: "online" | "offline" = "offline";
   let latency: number | undefined;
 
   // Try ports in parallel for faster results
-  const portChecks = portsToTry.map(port => {
+  const portChecks = portsToTry.map((port) => {
     return new Promise<boolean>((resolve) => {
       const socket = new net.Socket();
       socket.setTimeout(3500);
@@ -66,7 +76,7 @@ async function checkIp(target: Target, timestamp: string): Promise<CheckResult> 
   });
 
   const results = await Promise.all(portChecks);
-  if (results.some(r => r)) {
+  if (results.some((r) => r)) {
     status = "online";
     latency = Date.now() - startTime;
   }
@@ -77,19 +87,24 @@ async function checkIp(target: Target, timestamp: string): Promise<CheckResult> 
     state: target.state,
     status,
     latency,
-    timestamp
+    timestamp,
   };
 }
 
 async function main() {
-  const stateFilter = process.argv.find(arg => arg.startsWith('--state='))?.split('=')[1];
+  const stateFilter = process.argv
+    .find((arg) => arg.startsWith("--state="))
+    ?.split("=")[1];
   const timestamp = new Date().toISOString();
 
   console.log(`--- Starting External Monitoring Worker ---`);
   if (stateFilter) console.log(`Filter: [State: ${stateFilter}]`);
 
   // 1. Fetch Targets
-  let query = supabase.from("monitoring_targets").select("id, ip, provider, state, services").eq("is_active", true);
+  let query = supabase
+    .from("monitoring_targets")
+    .select("id, ip, provider, state, services")
+    .eq("is_active", true);
   if (stateFilter) {
     query = query.ilike("state", stateFilter);
   }
@@ -105,12 +120,16 @@ async function main() {
   // 2. Process with Concurrency
   const CONCURRENCY = 100;
   const results: CheckResult[] = [];
-  
+
   for (let i = 0; i < targets.length; i += CONCURRENCY) {
     const chunk = targets.slice(i, i + CONCURRENCY);
-    console.log(`Checking block ${i + 1} to ${Math.min(i + CONCURRENCY, targets.length)}...`);
-    
-    const chunkResults = await Promise.all(chunk.map(t => checkIp(t as Target, timestamp)));
+    console.log(
+      `Checking block ${i + 1} to ${Math.min(i + CONCURRENCY, targets.length)}...`,
+    );
+
+    const chunkResults = await Promise.all(
+      chunk.map((t) => checkIp(t as Target, timestamp)),
+    );
     results.push(...chunkResults);
   }
 
@@ -122,11 +141,14 @@ async function main() {
     const { error: insertError } = await supabase
       .from("connectivity_checks")
       .insert(batch);
-    
+
     if (insertError) {
-      console.error(`Error storing batch ${i/BATCH_SIZE + 1}:`, insertError.message);
+      console.error(
+        `Error storing batch ${i / BATCH_SIZE + 1}:`,
+        insertError.message,
+      );
     } else {
-      console.log(`Batch ${i/BATCH_SIZE + 1} stored.`);
+      console.log(`Batch ${i / BATCH_SIZE + 1} stored.`);
     }
   }
 
@@ -138,19 +160,25 @@ async function main() {
 
     console.log(`Triggering analysis at ${triggerUrl.toString()}...`);
     try {
-      await axios.post(triggerUrl.toString(), {}, {
-        headers: {
-          'Authorization': `Bearer ${cronSecret}`,
-          'Content-Type': 'application/json'
+      await axios.post(
+        triggerUrl.toString(),
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${cronSecret}`,
+            "Content-Type": "application/json",
+          },
+          timeout: 10000,
         },
-        timeout: 10000
-      });
+      );
       console.log(`Analysis trigger sent.`);
     } catch (e: any) {
       console.error("Failed to notify API:", e.message);
     }
   } else {
-    console.log("No API_CHECK_URL or CRON_SECRET found. Analysis not triggered.");
+    console.log(
+      "No API_CHECK_URL or CRON_SECRET found. Analysis not triggered.",
+    );
   }
 
   console.log("Worker finished.");

@@ -1,8 +1,8 @@
 {
     "Metadata": {
-        "title": "Vzla Blackout Tracker 🇻🇪",
-        "description": "Real-time monitoring of power outages and network connectivity in Venezuela. Promoting transparency and data-driven insights.",
-        "keywords": "venezuela, blackout, electricity, tracker, network, connectivity"
+        "title": "Vzla Blackout Tracker - Real-time Electricity & Network Status 🇻🇪",
+        "description": "Real-time monitoring of power outages and network connectivity in Venezuela. Detailed reports per state and ISP. Promoting transparency through data.",
+        "keywords": "venezuela blackout tracker, electricity status venezuela, network connectivity monitor, power outage map venezuela, internet status venezuela, venezuela light status"
     },
     "Dashboard": {
         "title": "Vzla Blackout Tracker",

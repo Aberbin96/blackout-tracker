@@ -28,9 +28,9 @@ export function Header() {
           <Icon name="bolt" className="text-xl" />
         </div>
         <div>
-          <h2 className="text-lg font-black leading-tight tracking-tight uppercase italic flex items-center gap-2 text-primary dark:text-slate-100">
+          <h1 className="text-lg font-black leading-tight tracking-tight uppercase italic flex items-center gap-2 text-primary dark:text-slate-100">
             {t("title")}
-          </h2>
+          </h1>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
             {t("experimental")}
           </p>

@@ -20,6 +20,15 @@ const inter = Inter({
   display: "swap",
 });
 
+import { Viewport } from "next";
+
+export const viewport: Viewport = {
+  themeColor: "#0f172a",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
+
 export async function generateMetadata({
   params,
 }: {
@@ -27,20 +36,47 @@ export async function generateMetadata({
 }) {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "Metadata" });
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://blackout-tracker-psi.vercel.app";
 
   return {
-    metadataBase: new URL(
-      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-    ),
-    title: t("title"),
+    metadataBase: new URL(baseUrl),
+    title: {
+      default: t("title"),
+      template: `%s | ${t("title")}`,
+    },
     description: t("description"),
     keywords: t("keywords"),
+    authors: [{ name: "Vzla Blackout Tracker Team" }],
+    creator: "Vzla Blackout Tracker",
+    publisher: "Vzla Blackout Tracker",
+    formatDetection: {
+      email: false,
+      address: false,
+      telephone: false,
+    },
+    alternates: {
+      canonical: "/",
+      languages: {
+        "en-US": "/en",
+        "es-VE": "/es",
+      },
+    },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-video-preview": -1,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+      },
+    },
     openGraph: {
       title: t("title"),
       description: t("description"),
-      type: "website",
-      locale: locale,
-      siteName: "Vzla Blackout Tracker",
+      url: "./",
+      siteName: t("title"),
       images: [
         {
           url: "/opengraph-image.png",
@@ -49,12 +85,20 @@ export async function generateMetadata({
           alt: t("title"),
         },
       ],
+      locale: locale === "es" ? "es_VE" : "en_US",
+      type: "website",
     },
     twitter: {
       card: "summary_large_image",
       title: t("title"),
       description: t("description"),
+      creator: "@vzlablackout",
       images: ["/opengraph-image.png"],
+    },
+    icons: {
+      icon: "/favicon.ico",
+      shortcut: "/favicon.ico",
+      apple: "/favicon.ico",
     },
   };
 }
@@ -77,6 +121,12 @@ export default async function LocaleLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
         <link
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
           rel="stylesheet"

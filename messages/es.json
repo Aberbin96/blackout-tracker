@@ -1,8 +1,8 @@
 {
     "Metadata": {
-        "title": "Vzla Blackout Tracker 🇻🇪",
-        "description": "Monitoreo en tiempo real de cortes eléctricos y conectividad de red en Venezuela. Promoviendo la transparencia y los datos.",
-        "keywords": "venezuela, apagones, electricidad, tracker, red, conectividad"
+        "title": "Vzla Blackout Tracker - Estado de Luz e Internet en Tiempo Real 🇻🇪",
+        "description": "Monitoreo en tiempo real de apagones y conectividad en Venezuela. Reportes detallados por estado y proveedor de internet. Datos para la transparencia.",
+        "keywords": "apagones venezuela, falta de luz venezuela, internet venezuela, tracker de luz, conectividad venezuela, sin luz venezuela, reporte de luz"
     },
     "Dashboard": {
         "title": "Vzla Blackout Tracker",
