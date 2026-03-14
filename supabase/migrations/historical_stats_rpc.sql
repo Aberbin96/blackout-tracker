@@ -8,21 +8,21 @@ RETURNS TABLE (
   total_count BIGINT
 ) AS $$
 BEGIN
-  -- 1. Daily stats (last 7 days)
+  -- 1. Daily stats (last 7 days) from the summary table
   RETURN QUERY
   SELECT 
-    date_trunc('day', timestamp)::TIMESTAMPTZ as bucket,
+    date::TIMESTAMPTZ as bucket,
     'day'::TEXT as granularity,
-    COUNT(*) FILTER (WHERE status = 'online')::BIGINT as online_count,
-    COUNT(*)::BIGINT as total_count
-  FROM connectivity_checks
-  WHERE timestamp >= (CURRENT_DATE - INTERVAL '7 days')
+    SUM(online_checks)::BIGINT as online_count,
+    SUM(total_checks)::BIGINT as total_count
+  FROM daily_regional_stats
+  WHERE date >= (CURRENT_DATE - INTERVAL '7 days')
     AND (p_state IS NULL OR p_state = '' OR state = p_state)
     AND (p_provider IS NULL OR p_provider = '' OR provider = p_provider)
   GROUP BY 1, 2
   ORDER BY 1 ASC;
 
-  -- 2. Hourly stats (last 24 hours)
+  -- 2. Hourly stats (last 24 hours) from raw checks
   RETURN QUERY
   SELECT 
     date_trunc('hour', timestamp)::TIMESTAMPTZ as bucket,

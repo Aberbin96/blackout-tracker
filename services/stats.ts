@@ -85,10 +85,14 @@ export async function getRegionalStats(state?: string, provider?: string) {
         color = "text-success";
         bg = "bg-success/10";
       }
-    } else if (ratio > 0.3) {
+    } else if (ratio >= 0.6) {
       status = "status.rationing";
       color = "text-warning";
       bg = "bg-warning/10";
+    } else {
+      status = "status.outage";
+      color = "text-danger";
+      bg = "bg-danger/10";
     }
 
     formattedStats.push({
@@ -127,10 +131,14 @@ export async function getRegionalStats(state?: string, provider?: string) {
           color = "text-success";
           bg = "bg-success/10";
         }
-      } else if (ratio > 0.3) {
+      } else if (ratio >= 0.6) {
         status = "status.rationing";
         color = "text-warning";
         bg = "bg-warning/10";
+      } else {
+        status = "status.outage";
+        color = "text-danger";
+        bg = "bg-danger/10";
       }
 
       formattedStats.push({
@@ -183,10 +191,14 @@ export async function getNodeComposition(state?: string, provider?: string) {
         color = "bg-success";
         textColor = "text-success";
       }
-    } else if (ratio > 0.3) {
+    } else if (ratio >= 0.6) {
       status = "status.degraded";
       color = "bg-warning";
       textColor = "text-warning";
+    } else {
+      status = "status.outage";
+      color = "bg-danger";
+      textColor = "text-danger";
     }
 
     return {
