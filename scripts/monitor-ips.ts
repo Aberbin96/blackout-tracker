@@ -43,6 +43,7 @@ interface CheckResult {
   state: string;
   status: "online" | "offline";
   latency?: number;
+  working_port?: number;
   error_type?: string;
   timeout_ms: number;
   timestamp: string;
@@ -53,8 +54,8 @@ async function pingIp(ip: string, timeoutMs: number): Promise<boolean> {
     const platform = process.platform;
     // -c 3: three packets, -W: timeout in ms per packet
     const cmd = platform === "win32" 
-      ? `ping -n 3 -w ${timeoutMs} ${ip}` 
-      : `ping -c 3 -W ${Math.ceil(timeoutMs / 1000)} ${ip}`;
+      ? `ping -n 2 -w ${timeoutMs} ${ip}` 
+      : `ping -c 2 -W ${Math.ceil(timeoutMs / 1000)} ${ip}`;
     
     await execAsync(cmd);
     return true;
@@ -79,6 +80,7 @@ async function fastCheck(
     state: target.state,
     status: res.success ? "online" : "offline",
     latency: Date.now() - startTime,
+    working_port: res.success ? primaryPort : undefined,
     error_type: res.code,
     timeout_ms: timeoutMs,
     timestamp,
@@ -110,8 +112,12 @@ async function deepCheck(
   ];
 
   // Wait for results
-  const results = await Promise.all(checkPromises);
-  const success = results.find(r => r.success);
+  const results = await Promise.all(
+    checkPromises.map((p, idx) =>
+      p.then((res) => ({ ...res, port: idx === 0 ? undefined : portsToTry[idx - 1] })),
+    ),
+  );
+  const success = results.find((r) => r.success);
 
   if (success) {
     return {
@@ -120,6 +126,7 @@ async function deepCheck(
       state: target.state,
       status: "online",
       latency: Date.now() - startTime,
+      working_port: success.port,
       error_type: success.code,
       timeout_ms: timeoutMs,
       timestamp,
@@ -225,7 +232,7 @@ async function main() {
   // 2. Phase 1: Fast TCP Scan for all nodes
   console.log(`Phase 1: Fast TCP check on all ${targets.length} nodes...`);
   const initialResults = new Map<string, CheckResult>();
-  const BATCH_SIZE = 200; // Increased
+  const BATCH_SIZE = 100; // Reduced from 500 to prevent network saturation
 
   for (let i = 0; i < allTargets.length; i += BATCH_SIZE) {
     const batch = allTargets.slice(i, i + BATCH_SIZE);
@@ -241,6 +248,9 @@ async function main() {
     console.log(
       `FastCheck: Block ${i + 1}-${Math.min(i + BATCH_SIZE, allTargets.length)} [${onlineInBatch} ONLINE]`,
     );
+    
+    // Add small delay to let the network breathe
+    await new Promise((r) => setTimeout(r, 200));
   }
 
   // 3. Phase 2: Deep Scan for potentially offline nodes
@@ -251,7 +261,7 @@ async function main() {
   console.log(`Phase 2: Deep Scan for ${offlineIps.length} nodes (ICMP + Sequential ports)...`);
   
   if (offlineIps.length > 0) {
-    const DEEP_BATCH_SIZE = 100; // Parallel node checks
+    const DEEP_BATCH_SIZE = 100; // Reduced from 300
     const offlineTargets = allTargets.filter(t => offlineIps.includes(t.ip));
 
     for (let i = 0; i < offlineTargets.length; i += DEEP_BATCH_SIZE) {
@@ -267,6 +277,9 @@ async function main() {
       });
       
       console.log(`DeepCheck: Block ${i + 1}-${Math.min(i + DEEP_BATCH_SIZE, offlineTargets.length)} verified.`);
+      
+      // Delay between deep scan batches
+      await new Promise((r) => setTimeout(r, 200));
     }
   }
 
@@ -278,7 +291,7 @@ async function main() {
   console.log(`Phase 3: Heroic Retry for ${stillOfflineIps.length} nodes (15s timeout)...`);
 
   if (stillOfflineIps.length > 0) {
-    const HEROIC_BATCH_SIZE = 100;
+    const HEROIC_BATCH_SIZE = 100; // Reduced from 300
     const heroicTargets = allTargets.filter(t => stillOfflineIps.includes(t.ip));
     const HEROIC_TIMEOUT = 10000; // 10s is enough for extreme cases
 
@@ -293,19 +306,23 @@ async function main() {
             performCheck(target.ip, 8291, HEROIC_TIMEOUT)
           ]);
           
-          const success = results.find(r => r.success);
-          if (success) {
-            return {
-              ip: target.ip,
-              provider: target.provider,
-              state: target.state,
-              status: "online" as const,
-              latency: HEROIC_TIMEOUT / 2, 
-              error_type: "HEROIC_" + success.code,
-              timeout_ms: HEROIC_TIMEOUT,
-              timestamp,
-            };
-          }
+            const heroicPorts = [80, 443, 8291];
+            const successIndex = results.findIndex(r => r.success);
+            const success = results[successIndex];
+
+            if (success) {
+              return {
+                ip: target.ip,
+                provider: target.provider,
+                state: target.state,
+                status: "online" as const,
+                latency: HEROIC_TIMEOUT / 2, 
+                working_port: heroicPorts[successIndex],
+                error_type: "HEROIC_" + success.code,
+                timeout_ms: HEROIC_TIMEOUT,
+                timestamp,
+              };
+            }
           return null;
         }),
       );
@@ -315,22 +332,61 @@ async function main() {
       });
 
       console.log(`HeroicCheck: Block ${i + 1}-${Math.min(i + HEROIC_BATCH_SIZE, heroicTargets.length)} complete.`);
+      
+      // Delay between heroic batches
+      await new Promise((r) => setTimeout(r, 200));
     }
   }
 
+  // 4. Smart Port Learning: Identify targets that need service promotion
   const finalResults = Array.from(initialResults.values());
-  const onlineCount = finalResults.filter((r) => r.status === "online").length;
-  const offlineCount = finalResults.length - onlineCount;
+  const targetsToUpdate: { id: string; services: number[] }[] = [];
+  
+  finalResults.forEach((res: CheckResult) => {
+    if (res.status === "online" && res.working_port) {
+      const target = allTargets.find((t) => t.ip === res.ip);
+      if (target) {
+        const currentServices = target.services || [];
+        // If the working port is NOT the primary port, promote it
+        if (currentServices[0] !== res.working_port) {
+          const newServices = [
+            res.working_port,
+            ...currentServices.filter((p) => p !== res.working_port),
+          ];
+          console.log(`  [Promotion] ${target.ip}: ${currentServices[0]} -> ${res.working_port}`);
+          targetsToUpdate.push({ id: target.id, services: newServices });
+        }
+      }
+    }
+  });
+
+  if (targetsToUpdate.length > 0) {
+    console.log(`Smart Learning: Promoting ports for ${targetsToUpdate.length} nodes...`);
+    // Upsert isn't ideal for bulk update of specific columns, but Supabase doesn't have a better "bulk update" 
+    // for different IDs with different values other than sequential or RPC.
+    // For now, we process in chunks sequentially to avoid DB lock issues.
+    for (const update of targetsToUpdate) {
+      await supabase
+        .from("monitoring_targets")
+        .update({ services: update.services })
+        .eq("id", update.id);
+    }
+    console.log("Smart Learning: Update complete.");
+  }
+
+  const finalResultsCleaned = Array.from(initialResults.values()).map(({ working_port, ...rest }) => rest);
+  const onlineCount = finalResultsCleaned.filter((r) => r.status === "online").length;
+  const offlineCount = finalResultsCleaned.length - onlineCount;
 
   console.log(
     `--- Final Summary: ${onlineCount} Online, ${offlineCount} Offline ---`,
   );
 
-  // 4. Store Results Directly in Supabase
-  console.log(`Storing ${finalResults.length} results directly in Supabase...`);
+  // 5. Store Results Directly in Supabase
+  console.log(`Storing ${finalResultsCleaned.length} results directly in Supabase...`);
   const SUPABASE_INSERT_BATCH_SIZE = 500;
-  for (let i = 0; i < finalResults.length; i += SUPABASE_INSERT_BATCH_SIZE) {
-    const batch = finalResults.slice(i, i + SUPABASE_INSERT_BATCH_SIZE);
+  for (let i = 0; i < finalResultsCleaned.length; i += SUPABASE_INSERT_BATCH_SIZE) {
+    const batch = finalResultsCleaned.slice(i, i + SUPABASE_INSERT_BATCH_SIZE);
     const { error: insertError } = await supabase
       .from("connectivity_checks")
       .insert(batch);
