@@ -70,19 +70,26 @@ async function fastCheck(
   timestamp: string,
 ): Promise<CheckResult> {
   const startTime = Date.now();
-  const timeoutMs = 5000; // Increased from 2500 for better reliability with 2-packet pings
+  const timeoutMs = 5000;
   const primaryPort =
     target.services && target.services.length > 0 ? target.services[0] : 80;
 
-  const res = await performCheck(target.ip, primaryPort, timeoutMs);
+  // Run ICMP (Ping) and TCP Check in parallel
+  const [icmpRes, tcpRes] = await Promise.all([
+    pingIp(target.ip, 3000),
+    performCheck(target.ip, primaryPort, timeoutMs)
+  ]);
+
+  const isOnline = icmpRes || tcpRes.success;
+
   return {
     ip: target.ip,
     provider: target.provider,
     state: normalizeStateName(target.state).toLowerCase(),
-    status: res.success ? "online" : "offline",
+    status: isOnline ? "online" : "offline",
     latency: Date.now() - startTime,
-    working_port: res.success ? primaryPort : undefined,
-    error_type: res.code,
+    working_port: tcpRes.success ? primaryPort : (icmpRes ? undefined : undefined),
+    error_type: tcpRes.success ? "OPEN" : (icmpRes ? "ICMP_ONLY" : tcpRes.code),
     timeout_ms: timeoutMs,
     timestamp,
   };
