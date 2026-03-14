@@ -3,6 +3,7 @@ import path from "path";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import dns from "dns/promises";
+import net from "net";
 import { classifyDevice, detectNetworkType } from "../utils/classifier";
 
 // Load environment variables
@@ -17,6 +18,30 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+/**
+ * Simple TCP port check
+ */
+async function checkIpPort(ip: string, port: number, timeoutMs = 3000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(timeoutMs);
+
+    socket.connect(port, ip, () => {
+      socket.destroy();
+      resolve(true);
+    });
+
+    const fail = () => {
+      socket.destroy();
+      resolve(false);
+    };
+
+    socket.on("error", fail);
+    socket.on("timeout", fail);
+    socket.on("close", fail);
+  });
+}
 
 /**
  * Target Enrichment Tool
@@ -99,43 +124,74 @@ async function getServiceMetadata(ip: string, port: number): Promise<any> {
 }
 
 async function processTarget(target: any, index: number, total: number) {
-  const ports = target.services || [];
+  const currentServices = target.services || [80];
+  const primaryPort = currentServices[0];
+  
+  // 1. Port Discovery & Promotion
+  let workingPort = primaryPort;
+  let needsPromotion = false;
 
-  // 1. Basic Classification (ASN/Provider based)
+  // Check if primary port is actually open
+  const isPrimaryOpen = await checkIpPort(target.ip, primaryPort);
+  
+  if (!isPrimaryOpen) {
+    // If primary is closed, try fallback ports (Smart Learning)
+    const fallbackPorts = [443, 8291, 22, 21, 53, 3389, 7547, 8080, 8443].filter(p => p !== primaryPort);
+    
+    for (const port of fallbackPorts.slice(0, 5)) { // Try up to 5 common ports
+      const isPortOpen = await checkIpPort(target.ip, port, 2000);
+      if (isPortOpen) {
+        workingPort = port;
+        needsPromotion = true;
+        break;
+      }
+    }
+  }
+
+  // 2. Metadata Extraction (using the working port)
   const networkType = detectNetworkType(
     target.provider,
     target.asn,
     target.classification_metadata?.mobile || false,
   );
 
-  // 2. Deep Enrichment (Web Ports)
-  const webPort = ports.find((p: number) =>
-    [80, 443, 8080, 8081, 8888].includes(p),
-  );
+  const isWebPort = [80, 443, 8080, 8081, 8888].includes(workingPort);
 
   let combinedMetadata = { ...target.classification_metadata };
-  if (webPort) {
-    const newMetadata = await getServiceMetadata(target.ip, webPort);
+  if (isWebPort) {
+    const newMetadata = await getServiceMetadata(target.ip, workingPort);
     combinedMetadata = { ...combinedMetadata, ...newMetadata };
   }
 
   // 3. Device Type Classification
   const deviceType = classifyDevice(combinedMetadata);
 
+  // 4. Update Database
+  const updateData: any = {
+    classification_metadata: combinedMetadata,
+    device_type: deviceType,
+    network_type: networkType,
+    is_mobile: networkType === "mobile",
+  };
+
+  if (needsPromotion) {
+    updateData.services = [
+      workingPort,
+      ...currentServices.filter((p: number) => p !== workingPort),
+    ];
+    console.log(`[Promotion] ${target.ip}: ${primaryPort} -> ${workingPort}`);
+  }
+
   const { error: updateError } = await supabase
     .from("monitoring_targets")
-    .update({
-      classification_metadata: combinedMetadata,
-      device_type: deviceType,
-      network_type: networkType,
-      is_mobile: networkType === "mobile",
-    })
+    .update(updateData)
     .eq("id", target.id);
 
   if (updateError) {
     console.log(`[${index + 1}/${total}] Error updating ${target.ip}: ${updateError.message}`);
   } else {
-    console.log(`[${index + 1}/${total}] Processed ${target.ip} (${networkType}/${deviceType})`);
+    const promotionLabel = needsPromotion ? ` (PROMOTED ${workingPort})` : "";
+    console.log(`[${index + 1}/${total}] Processed ${target.ip} (${networkType}/${deviceType})${promotionLabel}`);
   }
 }
 

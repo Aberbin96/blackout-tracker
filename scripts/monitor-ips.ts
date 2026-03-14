@@ -363,55 +363,19 @@ async function main() {
     }
   }
 
-  // 4. Smart Port Learning: Identify targets that need service promotion
-  const finalResults = Array.from(initialResults.values());
-  const targetsToUpdate: { id: string; services: number[] }[] = [];
-  
-  finalResults.forEach((res: CheckResult) => {
-    if (res.status === "online" && res.working_port) {
-      const target = allTargets.find((t) => t.ip === res.ip);
-      if (target) {
-        const currentServices = target.services || [];
-        // If the working port is NOT the primary port, promote it
-        if (currentServices[0] !== res.working_port) {
-          const newServices = [
-            res.working_port,
-            ...currentServices.filter((p) => p !== res.working_port),
-          ];
-          console.log(`  [Promotion] ${target.ip}: ${currentServices[0]} -> ${res.working_port}`);
-          targetsToUpdate.push({ id: target.id, services: newServices });
-        }
-      }
-    }
-  });
-
-  if (targetsToUpdate.length > 0) {
-    console.log(`Smart Learning: Promoting ports for ${targetsToUpdate.length} nodes...`);
-    // Upsert isn't ideal for bulk update of specific columns, but Supabase doesn't have a better "bulk update" 
-    // for different IDs with different values other than sequential or RPC.
-    // For now, we process in chunks sequentially to avoid DB lock issues.
-    for (const update of targetsToUpdate) {
-      await supabase
-        .from("monitoring_targets")
-        .update({ services: update.services })
-        .eq("id", update.id);
-    }
-    console.log("Smart Learning: Update complete.");
-  }
-
-  const finalResultsCleaned = Array.from(initialResults.values()).map(({ working_port, ...rest }) => rest);
-  const onlineCount = finalResultsCleaned.filter((r) => r.status === "online").length;
-  const offlineCount = finalResultsCleaned.length - onlineCount;
+  const finalResults = Array.from(initialResults.values()).map(({ working_port, ...rest }) => rest);
+  const onlineCount = finalResults.filter((r) => r.status === "online").length;
+  const offlineCount = finalResults.length - onlineCount;
 
   console.log(
     `--- Final Summary: ${onlineCount} Online, ${offlineCount} Offline ---`,
   );
 
   // 5. Store Results Directly in Supabase
-  console.log(`Storing ${finalResultsCleaned.length} results directly in Supabase...`);
+  console.log(`Storing ${finalResults.length} results directly in Supabase...`);
   const SUPABASE_INSERT_BATCH_SIZE = 500;
-  for (let i = 0; i < finalResultsCleaned.length; i += SUPABASE_INSERT_BATCH_SIZE) {
-    const batch = finalResultsCleaned.slice(i, i + SUPABASE_INSERT_BATCH_SIZE);
+  for (let i = 0; i < finalResults.length; i += SUPABASE_INSERT_BATCH_SIZE) {
+    const batch = finalResults.slice(i, i + SUPABASE_INSERT_BATCH_SIZE);
     const { error: insertError } = await supabase
       .from("connectivity_checks")
       .insert(batch);
