@@ -19,43 +19,14 @@ export async function POST(request: Request) {
     const url = new URL(request.url);
     const stateFilter = url.searchParams.get("state") || undefined;
 
-    const results = await MonitoringService.performAllChecks(stateFilter);
-
-    // Trigger analysis asynchronously so we don't block the API response
-    AnalyzerService.analyze(results).catch((err) => {
-      console.error("[Analyzer] Trigger failed:", err.message);
-    });
-
-    // Group results by state and then provider
-    const stats: any = {};
-
-    results.forEach((curr: CheckResult) => {
-      if (!stats[curr.state]) {
-        stats[curr.state] = { total: 0, online: 0, providers: {} };
-      }
-
-      const stateStats = stats[curr.state];
-      stateStats.total++;
-      if (curr.status === "online") {
-        stateStats.online++;
-      }
-
-      if (!stateStats.providers[curr.provider]) {
-        stateStats.providers[curr.provider] = { total: 0, online: 0 };
-      }
-
-      const providerStats = stateStats.providers[curr.provider];
-      providerStats.total++;
-      if (curr.status === "online") {
-        providerStats.online++;
-      }
-    });
-
+    console.log(
+      `[API] Triggering analysis for state: ${stateFilter || "all"}`,
+    );
+    const analysisResponse =
+      await MonitoringService.analyzeLastResults(stateFilter);
+    
     return NextResponse.json({
-      success: true,
-      count: results.length,
-      online: results.filter((r) => r.status === "online").length,
-      states: stats,
+      ...analysisResponse,
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

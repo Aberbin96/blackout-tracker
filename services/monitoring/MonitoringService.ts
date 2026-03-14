@@ -1,6 +1,7 @@
 import net from "net";
 import { supabase } from "@/utils/supabase";
 import { normalizeStateName } from "@/utils/normalization";
+import { AnalyzerService } from "@/services/analyzer";
 
 export interface CheckResult {
   ip: string;
@@ -13,8 +14,65 @@ export interface CheckResult {
 
 export class MonitoringService {
   /**
-   * Performs a connectivity check for active targets from Supabase.
-   * If state is provided, only checks targets in that state.
+   * Fetches the latest check results from the database for analysis.
+   */
+  static async analyzeLastResults(state?: string, limit: number = 200) {
+    let query = supabase
+      .from("connectivity_checks")
+      .select("*")
+      .order('timestamp', { ascending: false })
+      .limit(limit);
+
+    if (state) {
+      query = query.eq('state', state.toLowerCase());
+    }
+
+    const { data: results, error } = await query;
+
+    if (error) {
+      console.error("[MonitoringService] Error fetching results for analysis:", error.message);
+      return { success: false, error: error.message };
+    }
+
+    if (!results || results.length === 0) {
+      return { success: true, count: 0, message: "No recent results found" };
+    }
+
+    // Trigger analysis
+    await AnalyzerService.analyze(results as CheckResult[]);
+
+    return {
+      success: true,
+      count: results.length,
+      online: results.filter((r) => r.status === "online").length,
+    };
+  }
+
+  /**
+   * Processes a batch of externally collected check results.
+   */
+  static async processResults(results: CheckResult[]) {
+    if (!results || results.length === 0) return;
+
+    // 1. Store results in Supabase
+    await this.storeResults(results);
+
+    // 2. Trigger analysis for blackouts
+    try {
+      await AnalyzerService.analyze(results);
+    } catch (err) {
+      console.error("[Analyzer] Trigger failed:", err);
+    }
+
+    return {
+      success: true,
+      count: results.length,
+      online: results.filter((r) => r.status === "online").length,
+    };
+  }
+
+  /**
+   * Performs a connectivity check for active targets from Supabase (Legacy/Manual).
    */
   static async performAllChecks(stateFilter?: string): Promise<CheckResult[]> {
     const timestamp = new Date().toISOString();
@@ -98,9 +156,9 @@ export class MonitoringService {
 
     // Process regional blackouts based on results
     try {
-      await this.processBlackouts(results);
+      await AnalyzerService.analyze(results);
     } catch (err) {
-      console.error("Blackout processing failed:", err);
+      console.error("[Analyzer] Trigger failed:", err);
     }
 
     return results;
@@ -169,116 +227,6 @@ export class MonitoringService {
 
     if (error) {
       console.error("Error storing check results in Supabase:", error);
-    }
-  }
-
-  /**
-   * Analyzes check results to detect or resolve regional blackouts.
-   */
-  private static async processBlackouts(results: CheckResult[]) {
-    const statesMap: Record<
-      string,
-      { total: number; offline: number; totalLatency: number }
-    > = {};
-
-    results.forEach((res) => {
-      if (!statesMap[res.state])
-        statesMap[res.state] = { total: 0, offline: 0, totalLatency: 0 };
-      statesMap[res.state].total++;
-      if (res.status === "offline") {
-        statesMap[res.state].offline++;
-      } else {
-        statesMap[res.state].totalLatency += res.latency || 0;
-      }
-    });
-
-    for (const [state, counts] of Object.entries(statesMap)) {
-      const offlinePercent = (counts.offline / counts.total) * 100;
-      const onlineCount = counts.total - counts.offline;
-      const avgLatency =
-        onlineCount > 0 ? counts.totalLatency / onlineCount : 0;
-
-      // Severity Thresholds
-      let severity: "massive" | "partial" | "degraded" | "none" = "none";
-
-      if (counts.total >= 3) {
-        if (offlinePercent > 60) {
-          severity = "massive";
-        } else if (offlinePercent > 25) {
-          severity = "partial";
-        } else if (avgLatency > 1500) {
-          severity = "degraded";
-        }
-      }
-
-      // Check for existing active event
-      const { data: activeEvent } = await supabase
-        .from("blackout_events")
-        .select("*")
-        .eq("state", state)
-        .eq("status", "active")
-        .maybeSingle();
-
-      if (severity !== "none") {
-        // If there's an active event, update it if significant change
-        if (activeEvent) {
-          // Update event details (counts) but keep it active
-          await supabase
-            .from("blackout_events")
-            .update({
-              nodes_total: counts.total,
-              nodes_offline: counts.offline,
-              metadata: {
-                ...((activeEvent.metadata as object) || {}),
-                current_severity: severity,
-                avg_latency: Math.round(avgLatency),
-              },
-            })
-            .eq("id", activeEvent.id);
-        } else {
-          // New event: Persistence check (only alert if severity persists across multiple checks)
-          // For now, we'll implement a simple "new event" logic but we could add a buffer table here.
-          await supabase.from("blackout_events").insert({
-            state,
-            nodes_total: counts.total,
-            nodes_offline: counts.offline,
-            status: "active",
-            started_at: new Date().toISOString(),
-            metadata: {
-              initial_severity: severity,
-              avg_latency: Math.round(avgLatency),
-            },
-          });
-
-          // Send Telegram Alert based on severity
-          if (severity === "massive") {
-            // await TelegramService.sendBlackoutAlert(
-            //   state,
-            //   counts.total,
-            //   counts.offline,
-            // );
-          } else if (severity === "partial") {
-            // We could add a specialized partial alert here
-            // await TelegramService.sendBlackoutAlert(
-            //   state,
-            //   counts.total,
-            //   counts.offline,
-            // );
-          }
-        }
-      } else if (activeEvent) {
-        // Recovery logic: verify it's not a temporary flicker (flicker protection)
-        // Here we could add a "verify resolution" step, but for now we resolve immediately.
-        await supabase
-          .from("blackout_events")
-          .update({
-            status: "resolved",
-            ended_at: new Date().toISOString(),
-          })
-          .eq("id", activeEvent.id);
-
-        // await TelegramService.sendBlackoutResolved(state);
-      }
     }
   }
 }

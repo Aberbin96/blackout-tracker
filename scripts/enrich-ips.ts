@@ -98,74 +98,93 @@ async function getServiceMetadata(ip: string, port: number): Promise<any> {
   return metadata;
 }
 
-async function main() {
-  console.log("--- Starting Deep Service Enrichment & Classification ---");
+async function processTarget(target: any, index: number, total: number) {
+  const ports = target.services || [];
 
-  // Fetch all active targets
-  const { data: targets, error } = await supabase
-    .from("monitoring_targets")
-    .select("id, ip, services, classification_metadata, provider, asn")
-    .is("is_active", true);
+  // 1. Basic Classification (ASN/Provider based)
+  const networkType = detectNetworkType(
+    target.provider,
+    target.asn,
+    target.classification_metadata?.mobile || false,
+  );
 
-  if (error || !targets) {
-    console.error("Error fetching targets:", error);
-    return;
+  // 2. Deep Enrichment (Web Ports)
+  const webPort = ports.find((p: number) =>
+    [80, 443, 8080, 8081, 8888].includes(p),
+  );
+
+  let combinedMetadata = { ...target.classification_metadata };
+  if (webPort) {
+    const newMetadata = await getServiceMetadata(target.ip, webPort);
+    combinedMetadata = { ...combinedMetadata, ...newMetadata };
   }
 
-  console.log(`Found ${targets.length} targets to process.`);
+  // 3. Device Type Classification
+  const deviceType = classifyDevice(combinedMetadata);
 
-  for (let i = 0; i < targets.length; i++) {
-    const target = targets[i];
-    const ports = target.services || [];
+  const { error: updateError } = await supabase
+    .from("monitoring_targets")
+    .update({
+      classification_metadata: combinedMetadata,
+      device_type: deviceType,
+      network_type: networkType,
+      is_mobile: networkType === "mobile",
+    })
+    .eq("id", target.id);
 
-    // 1. Basic Classification (ASN/Provider based)
-    const networkType = detectNetworkType(
-      target.provider,
-      target.asn,
-      target.classification_metadata?.mobile || false,
-    );
+  if (updateError) {
+    console.log(`[${index + 1}/${total}] Error updating ${target.ip}: ${updateError.message}`);
+  } else {
+    console.log(`[${index + 1}/${total}] Processed ${target.ip} (${networkType}/${deviceType})`);
+  }
+}
 
-    // 2. Deep Enrichment (Web Ports)
-    const webPort = ports.find((p: number) =>
-      [80, 443, 8080, 8081, 8888].includes(p),
-    );
+async function main() {
+  console.log("--- Starting Optimized Deep Service Enrichment ---");
 
-    let combinedMetadata = { ...target.classification_metadata };
-    if (webPort) {
-      process.stdout.write(
-        `[${i + 1}/${targets.length}] Deep enriching ${target.ip}... `,
-      );
-      const newMetadata = await getServiceMetadata(target.ip, webPort);
-      combinedMetadata = { ...combinedMetadata, ...newMetadata };
-    } else {
-      process.stdout.write(
-        `[${i + 1}/${targets.length}] Quick classifying ${target.ip}... `,
-      );
-    }
+  const BATCH_SIZE = 1000;
+  const CONCURRENCY = 50;
+  let offset = 0;
+  let totalProcessed = 0;
 
-    // 3. Device Type Classification
-    const deviceType = classifyDevice(combinedMetadata);
-
-    const { error: updateError } = await supabase
+  while (true) {
+    console.log(`Fetching batch: ${offset} - ${offset + BATCH_SIZE}...`);
+    
+    const { data: targets, error } = await supabase
       .from("monitoring_targets")
-      .update({
-        classification_metadata: combinedMetadata,
-        device_type: deviceType,
-        network_type: networkType,
-        is_mobile: networkType === "mobile",
-      })
-      .eq("id", target.id);
+      .select("id, ip, services, classification_metadata, provider, asn")
+      .is("is_active", true)
+      .order('id', { ascending: true })
+      .range(offset, offset + BATCH_SIZE - 1);
 
-    if (updateError) {
-      process.stdout.write(`Error: ${updateError.message}\n`);
-    } else {
-      process.stdout.write(`Done (${networkType}/${deviceType}).\n`);
+    if (error) {
+      console.error("Error fetching targets:", error);
+      break;
     }
 
-    // Delay to avoid overwhelming
-    if (webPort) {
-      await new Promise((r) => setTimeout(r, 100));
+    if (!targets || targets.length === 0) {
+      console.log("No more targets to process.");
+      break;
     }
+
+    console.log(`Processing batch of ${targets.length} targets with concurrency ${CONCURRENCY}...`);
+
+    // Process batch with concurrency control
+    const chunks = [];
+    for (let i = 0; i < targets.length; i += CONCURRENCY) {
+      chunks.push(targets.slice(i, i + CONCURRENCY));
+    }
+
+    for (const chunk of chunks) {
+      await Promise.all(chunk.map((target, idx) => 
+        processTarget(target, offset + totalProcessed + idx, offset + targets.length)
+      ));
+      totalProcessed += chunk.length;
+    }
+
+    if (targets.length < BATCH_SIZE) break;
+    offset += BATCH_SIZE;
+    totalProcessed = 0; // Reset for next batch log clarity
   }
 
   console.log("\nEnrichment and Classification complete.");

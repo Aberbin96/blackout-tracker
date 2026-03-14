@@ -12,52 +12,45 @@ jobs:
         environment: Production
         strategy:
             matrix:
-                state:
-                    [
-                        zulia,
-                        miranda,
-                        distrito federal,
-                        carabobo,
-                        barinas,
-                        bolivar,
-                        lara,
-                        aragua,
-                        anzoategui,
-                        apure,
-                        monagas,
-                        portuguesa,
-                        tachira,
-                        merida,
-                        vargas,
-                        estado trujillo,
-                        nueva esparta,
-                        amazonas,
-                    ]
-            max-parallel: 3 # Process at most 3 states at exactly the same time to avoid hitting Vercel/Supabase limits
-            fail-fast: false # Don't stop other states if one times out
+                # Grouping states into fewer jobs to avoid overhead and maximize concurrency inside the script
+                group: [1, 2, 3]
+            max-parallel: 3
+            fail-fast: false
         steps:
+            - name: Checkout Code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: "npm"
+
+            - name: Install Dependencies
+              run: npm install --include=dev
+
             - name: Stagger Execution
-              run: sleep $(( (RANDOM % 45) )) # Sleep between 0 and 45 seconds to spread the load across the first minute
+              run: sleep $(( (RANDOM % 30) ))
 
-            - name: Hit Ping Endpoint
+            - name: Run Monitoring Worker
+              env:
+                  NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+                  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
+                  API_CHECK_URL: ${{ secrets.API_CHECK_URL }}
+                  CRON_SECRET: ${{ secrets.CRON_SECRET }}
               run: |
-                  echo "Hitting Blackout Tracker API for state: ${{ matrix.state }}..."
+                  # We divide the work by state index roughly
+                  case ${{ matrix.group }} in
+                    1) STATES="zulia,miranda,distrito federal,carabobo,aragua,vargas" ;;
+                    2) STATES="lara,anzoategui,bolivar,monagas,barinas,portuguesa" ;;
+                    3) STATES="tachira,merida,trujillo,nueva esparta,apure,amazonas,falcon,yaracuy,cojedes,guarico,sucre,delta amacuro" ;;
+                  esac
 
-                  # URL encode the state name (for states with spaces like "distrito federal")
-                  ENCODED_STATE=$(jq -nr --arg v "${{ matrix.state }}" '$v|@uri')
-
-                  response=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.API_CHECK_URL }}?state=${ENCODED_STATE}" \
-                       -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-                       -H "Content-Type: application/json")
-
-                  body=$(echo "$response" | head -n -1)
-                  status_code=$(echo "$response" | tail -n 1)
-
-                  echo "Response Status: $status_code"
-                  echo "Response Body: $body"
-
-                  if [ "$status_code" -ne 200 ]; then
-                    echo "::error::API check failed with status $status_code"
-                    # Exit 0 anyway so we don't spam GitHub failure emails for temporary network timeouts
-                    exit 0
-                  fi
+                  echo "Processing states: $STATES"
+                  
+                  # Loop through states in this group
+                  IFS=',' read -ra ADDR <<< "$STATES"
+                  for state in "${ADDR[@]}"; do
+                    echo "--- Pinging $state ---"
+                    npx tsx scripts/monitor-ips.ts --state="$state"
+                  done

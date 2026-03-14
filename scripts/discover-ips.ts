@@ -1,14 +1,11 @@
+import "./load-env";
 import axios from "axios";
 import net from "net";
 import path from "path";
-import dotenv from "dotenv";
 import { normalizeStateName } from "../utils/normalization";
 import { supabase } from "../utils/supabase";
 import { VENEZUELA_ISPS } from "../constants/providers";
 import { detectNetworkType } from "../utils/classifier";
-
-// Load environment variables
-dotenv.config({ path: path.join(process.cwd(), ".env.local") });
 
 /**
  * Omni-Discovery Tool (Country-Wide Mapping) with Supabase Persistence
