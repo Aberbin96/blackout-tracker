@@ -1,6 +1,7 @@
 import { NextIntlClientProvider } from "next-intl";
-import { getMessages, getTranslations } from "next-intl/server";
+import { getMessages, getTranslations, setRequestLocale } from "next-intl/server";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Suspense } from "react";
 import "../globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
@@ -19,6 +20,10 @@ const inter = Inter({
   subsets: ["latin"],
   display: "swap",
 });
+
+export function generateStaticParams() {
+  return [{ locale: "en" }, { locale: "es" }];
+}
 
 import { Viewport } from "next";
 
@@ -96,9 +101,9 @@ export async function generateMetadata({
       images: ["/opengraph-image.png"],
     },
     icons: {
-      icon: "/favicon.ico",
-      shortcut: "/favicon.ico",
-      apple: "/favicon.ico",
+      icon: "/icon.png",
+      shortcut: "/icon.png",
+      apple: "/apple-icon.png",
     },
   };
 }
@@ -114,6 +119,7 @@ export default async function LocaleLayout({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  setRequestLocale(locale);
   // Providing all messages to the client
   // side is the easiest way to get started
   const messages = await getMessages();
@@ -138,8 +144,10 @@ export default async function LocaleLayout({
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
             {children}
-            <Analytics />
-            <SpeedInsights />
+            <Suspense fallback={null}>
+              <Analytics />
+              <SpeedInsights />
+            </Suspense>
           </ThemeProvider>
         </NextIntlClientProvider>
       </body>

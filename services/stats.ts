@@ -1,6 +1,10 @@
 import { supabase } from "@/utils/supabase";
+import { cacheLife } from "next/cache";
 
 export async function getDashboardStats(state?: string, provider?: string) {
+  "use cache";
+  cacheLife("minutes");
+
   const { data, error } = await supabase.rpc("get_dashboard_stats", {
     p_state: state || null,
     p_provider: provider || null,
@@ -33,6 +37,9 @@ export async function getDashboardStats(state?: string, provider?: string) {
 }
 
 export async function getRegionalStats(state?: string, provider?: string) {
+  "use cache";
+  cacheLife("minutes");
+
   const [{ data: regions, error }, activeBlackouts] = await Promise.all([
     supabase.rpc("get_regional_stats", {
       p_state: state || null,
@@ -162,6 +169,9 @@ export async function getRegionalStats(state?: string, provider?: string) {
 }
 
 export async function getNodeComposition(state?: string, provider?: string) {
+  "use cache";
+  cacheLife("minutes");
+
   const { data: providers, error } = await supabase.rpc("get_provider_stats", {
     p_state: state || null,
     p_provider: provider || null,
@@ -214,6 +224,9 @@ export async function getNodeComposition(state?: string, provider?: string) {
 }
 
 export async function getMapData(state?: string, provider?: string) {
+  "use cache";
+  cacheLife("minutes");
+
   let allData: any[] = [];
   let page = 0;
   const PAGE_SIZE = 1000;
@@ -257,6 +270,9 @@ export async function getMapData(state?: string, provider?: string) {
 }
 
 export async function getFiltersData() {
+  "use cache";
+  cacheLife("weeks");
+
   const { data: targets } = await supabase
     .from("monitoring_targets")
     .select("state, provider")
@@ -274,6 +290,9 @@ export async function getFiltersData() {
 }
 
 export async function getHistoricalStats(state?: string, provider?: string) {
+  "use cache";
+  cacheLife("hours");
+
   const { data, error } = await supabase.rpc("get_historical_stats", {
     p_state: state || null,
     p_provider: provider || null,
@@ -312,6 +331,9 @@ export async function getHistoricalStats(state?: string, provider?: string) {
 }
 
 export async function getActiveBlackouts() {
+  "use cache";
+  cacheLife("minutes");
+
   const { data, error } = await supabase
     .from("blackout_events")
     .select("*")

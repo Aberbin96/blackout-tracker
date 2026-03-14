@@ -4,6 +4,7 @@ import type { NextConfig } from "next";
 const withNextIntl = createNextIntlPlugin();
 
 const nextConfig: NextConfig = {
+  cacheComponents: true,
   // Configuración para optimizar imports y reducir el tamaño del bundle del servidor
   experimental: {
     optimizePackageImports: [
