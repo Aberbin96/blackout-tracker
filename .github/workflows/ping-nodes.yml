@@ -12,9 +12,28 @@ jobs:
         environment: Production
         strategy:
             matrix:
-                # Grouping states into fewer jobs to avoid overhead and maximize concurrency inside the script
-                group: [1, 2, 3]
-            max-parallel: 3
+                # Individual jobs for high-density states, grouped for tiny ones
+                state: [
+                    "distrito federal", 
+                    "miranda", 
+                    "carabobo", 
+                    "zulia", 
+                    "tachira", 
+                    "aragua", 
+                    "lara", 
+                    "anzoategui", 
+                    "merida", 
+                    "vargas", 
+                    "bolivar", 
+                    "estado trujillo", 
+                    "portuguesa", 
+                    "barinas", 
+                    "nueva esparta", 
+                    "guarico", 
+                    "apure",
+                    "monagas,amazonas,delta amacuro,sucre,falcon,yaracuy,cojedes,dependencias federales"
+                ]
+            max-parallel: 10 # Control total concurrency
             fail-fast: false
         steps:
             - name: Checkout Code
@@ -29,9 +48,6 @@ jobs:
             - name: Install Dependencies
               run: npm install --include=dev
 
-            - name: Stagger Execution
-              run: sleep $(( (RANDOM % 30) ))
-
             - name: Run Monitoring Worker
               env:
                   NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
@@ -39,17 +55,7 @@ jobs:
                   API_CHECK_URL: ${{ vars.API_CHECK_URL || secrets.API_CHECK_URL }}
                   CRON_SECRET: ${{ secrets.CRON_SECRET }}
               run: |
-                  # We divide the work by state index roughly
-                  case ${{ matrix.group }} in
-                    1) STATES="zulia,miranda,distrito federal,carabobo,aragua,vargas" ;;
-                    2) STATES="lara,anzoategui,bolivar,monagas,barinas,portuguesa" ;;
-                    3) STATES="tachira,merida,trujillo,nueva esparta,apure,amazonas,falcon,yaracuy,cojedes,guarico,sucre,delta amacuro" ;;
-                  esac
-
-                  echo "Processing states: $STATES"
-                  
-                  # Loop through states in this group
-                  IFS=',' read -ra ADDR <<< "$STATES"
+                  IFS=',' read -ra ADDR <<< "${{ matrix.state }}"
                   for state in "${ADDR[@]}"; do
                     echo "--- Pinging $state ---"
                     npx tsx scripts/monitor-ips.ts --state="$state"

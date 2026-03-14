@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "monitor": "npx tsx scripts/monitor-ips.ts",
+    "verify-state": "npx tsx scripts/verify-state.ts"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.40.0",

@@ -1,8 +1,12 @@
 import net from "net";
 import axios from "axios";
-import dotenv from "dotenv";
 import path from "path";
 import { createClient } from "@supabase/supabase-js";
+import * as dotenv from "dotenv";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 // Load environment variables
 dotenv.config({ path: path.join(process.cwd(), ".env.local") });
@@ -39,56 +43,133 @@ interface CheckResult {
   state: string;
   status: "online" | "offline";
   latency?: number;
+  error_type?: string;
+  timeout_ms: number;
   timestamp: string;
 }
 
-async function checkIp(
+async function pingIp(ip: string, timeoutMs: number): Promise<boolean> {
+  try {
+    const platform = process.platform;
+    // -c 3: three packets, -W: timeout in ms per packet
+    const cmd = platform === "win32" 
+      ? `ping -n 3 -w ${timeoutMs} ${ip}` 
+      : `ping -c 3 -W ${Math.ceil(timeoutMs / 1000)} ${ip}`;
+    
+    await execAsync(cmd);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fastCheck(
   target: Target,
   timestamp: string,
 ): Promise<CheckResult> {
   const startTime = Date.now();
-  const portsToTry =
-    target.services?.length > 0 ? target.services : [80, 443, 8291];
+  const timeoutMs = 5000;
+  const primaryPort =
+    target.services && target.services.length > 0 ? target.services[0] : 80;
 
-  let status: "online" | "offline" = "offline";
-  let latency: number | undefined;
+  const res = await performCheck(target.ip, primaryPort, timeoutMs);
+  return {
+    ip: target.ip,
+    provider: target.provider,
+    state: target.state,
+    status: res.success ? "online" : "offline",
+    latency: Date.now() - startTime,
+    error_type: res.code,
+    timeout_ms: timeoutMs,
+    timestamp,
+  };
+}
 
-  // Try ports in parallel for faster results
-  const portChecks = portsToTry.map((port) => {
-    return new Promise<boolean>((resolve) => {
-      const socket = new net.Socket();
-      socket.setTimeout(3500);
+async function deepCheck(
+  target: Target,
+  timestamp: string,
+): Promise<CheckResult> {
+  const startTime = Date.now();
+  const timeoutMs = 5000;
 
-      socket.connect(port, target.ip, () => {
-        socket.destroy();
-        resolve(true);
-      });
+  // 1. Prepare parallel checks: Ping + Common Ports
+  const primaryPort =
+    target.services && target.services.length > 0 ? target.services[0] : 80;
+    
+  const otherPorts =
+    target.services?.length > 1
+      ? target.services.slice(1)
+      : [443, 8291, 22, 21, 53, 3389, 7547, 8080, 8443, 5060].filter((p) => p !== primaryPort);
 
-      const fail = () => {
-        socket.destroy();
-        resolve(false);
-      };
+  // We limit the number of parallel ports per node to avoid overwhelming local resources
+  const portsToTry = [primaryPort, ...otherPorts.slice(0, 5)];
 
-      socket.on("error", fail);
-      socket.on("timeout", fail);
-      socket.on("close", fail);
-    });
-  });
+  const checkPromises: Promise<{ success: boolean; code?: string }>[] = [
+    pingIp(target.ip, 3000).then(res => ({ success: res, code: 'ICMP_ECHO' })),
+    ...portsToTry.map(port => performCheck(target.ip, port, timeoutMs))
+  ];
 
-  const results = await Promise.all(portChecks);
-  if (results.some((r) => r)) {
-    status = "online";
-    latency = Date.now() - startTime;
+  // Wait for results
+  const results = await Promise.all(checkPromises);
+  const success = results.find(r => r.success);
+
+  if (success) {
+    return {
+      ip: target.ip,
+      provider: target.provider,
+      state: target.state,
+      status: "online",
+      latency: Date.now() - startTime,
+      error_type: success.code,
+      timeout_ms: timeoutMs,
+      timestamp,
+    };
   }
+
+  // If all failed, find the most descriptive error (usually the first TCP one)
+  const lastError = results.find(r => !r.success && r.code !== 'ICMP_ECHO')?.code;
 
   return {
     ip: target.ip,
     provider: target.provider,
     state: target.state,
-    status,
-    latency,
+    status: "offline",
+    latency: Date.now() - startTime,
+    error_type: lastError || "timeout",
+    timeout_ms: timeoutMs,
     timestamp,
   };
+}
+
+async function performCheck(ip: string, port: number, timeoutMs: number): Promise<{ success: boolean; code?: string }> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(timeoutMs);
+
+    socket.connect(port, ip, () => {
+      socket.destroy();
+      resolve({ success: true, code: "OPEN" });
+    });
+
+    socket.on("error", (err: any) => {
+      socket.destroy();
+      if (err.code === "ECONNREFUSED") {
+        resolve({ success: true, code: "ECONNREFUSED" });
+      } else {
+        resolve({ success: false, code: err.code });
+      }
+    });
+
+    socket.on("timeout", () => {
+      socket.destroy();
+      resolve({ success: false, code: "ETIMEDOUT" });
+    });
+
+    socket.on("close", () => {
+      socket.destroy();
+      resolve({ success: false, code: "ECONNRESET" });
+    });
+  });
 }
 
 async function main() {
@@ -141,38 +222,126 @@ async function main() {
 
   console.log(`Found ${targets.length} targets to monitor.`);
 
-  // 2. Process with Concurrency
-  const CONCURRENCY = 100;
-  const results: CheckResult[] = [];
+  // 2. Phase 1: Fast TCP Scan for all nodes
+  console.log(`Phase 1: Fast TCP check on all ${targets.length} nodes...`);
+  const initialResults = new Map<string, CheckResult>();
+  const BATCH_SIZE = 200; // Increased
 
-  for (let i = 0; i < targets.length; i += CONCURRENCY) {
-    const chunk = targets.slice(i, i + CONCURRENCY);
+  for (let i = 0; i < allTargets.length; i += BATCH_SIZE) {
+    const batch = allTargets.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map((target) => fastCheck(target, timestamp)),
+    );
+
+    batchResults.forEach((r) => {
+      initialResults.set(r.ip, r);
+    });
+
+    const onlineInBatch = batchResults.filter((r) => r.status === "online").length;
     console.log(
-      `Checking block ${i + 1} to ${Math.min(i + CONCURRENCY, targets.length)}...`,
+      `FastCheck: Block ${i + 1}-${Math.min(i + BATCH_SIZE, allTargets.length)} [${onlineInBatch} ONLINE]`,
     );
-
-    const chunkResults = await Promise.all(
-      chunk.map((t) => checkIp(t as Target, timestamp)),
-    );
-    results.push(...chunkResults);
   }
 
-  // 3. Store Results Directly in Supabase
-  console.log(`Storing ${results.length} results directly in Supabase...`);
-  const BATCH_SIZE = 500;
-  for (let i = 0; i < results.length; i += BATCH_SIZE) {
-    const batch = results.slice(i, i + BATCH_SIZE);
+  // 3. Phase 2: Deep Scan for potentially offline nodes
+  const offlineIps = Array.from(initialResults.values())
+    .filter((r) => r.status === "offline")
+    .map((r) => r.ip);
+
+  console.log(`Phase 2: Deep Scan for ${offlineIps.length} nodes (ICMP + Sequential ports)...`);
+  
+  if (offlineIps.length > 0) {
+    const DEEP_BATCH_SIZE = 100; // Parallel node checks
+    const offlineTargets = allTargets.filter(t => offlineIps.includes(t.ip));
+
+    for (let i = 0; i < offlineTargets.length; i += DEEP_BATCH_SIZE) {
+      const batch = offlineTargets.slice(i, i + DEEP_BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map((target) => deepCheck(target, timestamp)),
+      );
+
+      batchResults.forEach((r) => {
+        if (r.status === "online") {
+          initialResults.set(r.ip, r);
+        }
+      });
+      
+      console.log(`DeepCheck: Block ${i + 1}-${Math.min(i + DEEP_BATCH_SIZE, offlineTargets.length)} verified.`);
+    }
+  }
+
+  // 4. Phase 3: Heroic Retry (Long timeout for persistent timeouts)
+  const stillOfflineIps = Array.from(initialResults.values())
+    .filter((r) => r.status === "offline" && r.error_type === "ETIMEDOUT")
+    .map((r) => r.ip);
+
+  console.log(`Phase 3: Heroic Retry for ${stillOfflineIps.length} nodes (15s timeout)...`);
+
+  if (stillOfflineIps.length > 0) {
+    const HEROIC_BATCH_SIZE = 100;
+    const heroicTargets = allTargets.filter(t => stillOfflineIps.includes(t.ip));
+    const HEROIC_TIMEOUT = 10000; // 10s is enough for extreme cases
+
+    for (let i = 0; i < heroicTargets.length; i += HEROIC_BATCH_SIZE) {
+      const batch = heroicTargets.slice(i, i + HEROIC_BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (target) => {
+          // Check top 3 likely ports in parallel for heroic retry
+          const results = await Promise.all([
+            performCheck(target.ip, 80, HEROIC_TIMEOUT),
+            performCheck(target.ip, 443, HEROIC_TIMEOUT),
+            performCheck(target.ip, 8291, HEROIC_TIMEOUT)
+          ]);
+          
+          const success = results.find(r => r.success);
+          if (success) {
+            return {
+              ip: target.ip,
+              provider: target.provider,
+              state: target.state,
+              status: "online" as const,
+              latency: HEROIC_TIMEOUT / 2, 
+              error_type: "HEROIC_" + success.code,
+              timeout_ms: HEROIC_TIMEOUT,
+              timestamp,
+            };
+          }
+          return null;
+        }),
+      );
+
+      batchResults.forEach((r) => {
+        if (r) initialResults.set(r.ip, r);
+      });
+
+      console.log(`HeroicCheck: Block ${i + 1}-${Math.min(i + HEROIC_BATCH_SIZE, heroicTargets.length)} complete.`);
+    }
+  }
+
+  const finalResults = Array.from(initialResults.values());
+  const onlineCount = finalResults.filter((r) => r.status === "online").length;
+  const offlineCount = finalResults.length - onlineCount;
+
+  console.log(
+    `--- Final Summary: ${onlineCount} Online, ${offlineCount} Offline ---`,
+  );
+
+  // 4. Store Results Directly in Supabase
+  console.log(`Storing ${finalResults.length} results directly in Supabase...`);
+  const SUPABASE_INSERT_BATCH_SIZE = 500;
+  for (let i = 0; i < finalResults.length; i += SUPABASE_INSERT_BATCH_SIZE) {
+    const batch = finalResults.slice(i, i + SUPABASE_INSERT_BATCH_SIZE);
     const { error: insertError } = await supabase
       .from("connectivity_checks")
       .insert(batch);
 
     if (insertError) {
       console.error(
-        `Error storing batch ${i / BATCH_SIZE + 1}:`,
+        `Error storing batch ${i / SUPABASE_INSERT_BATCH_SIZE + 1}:`,
         insertError.message,
       );
     } else {
-      console.log(`Batch ${i / BATCH_SIZE + 1} stored.`);
+      console.log(`Batch ${i / SUPABASE_INSERT_BATCH_SIZE + 1} stored.`);
     }
   }
 
