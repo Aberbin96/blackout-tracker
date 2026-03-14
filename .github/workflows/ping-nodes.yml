@@ -12,27 +12,24 @@ jobs:
         environment: Production
         strategy:
             matrix:
-                # Individual jobs for high-density states, grouped for tiny ones
-                state: [
-                    "distrito federal", 
-                    "miranda", 
-                    "carabobo", 
-                    "zulia", 
-                    "tachira", 
-                    "aragua", 
-                    "lara", 
-                    "anzoategui", 
-                    "merida", 
-                    "vargas", 
-                    "bolivar", 
-                    "estado trujillo", 
-                    "portuguesa", 
-                    "barinas", 
-                    "nueva esparta", 
-                    "guarico", 
-                    "apure",
-                    "monagas,amazonas,delta amacuro,sucre,falcon,yaracuy,cojedes,dependencias federales"
-                ]
+                # Uniform chunks of 2,500 nodes to balance execution time
+                chunk:
+                    - "--limit=2500 --offset=0"
+                    - "--limit=2500 --offset=2500"
+                    - "--limit=2500 --offset=5000"
+                    - "--limit=2500 --offset=7500"
+                    - "--limit=2500 --offset=10000"
+                    - "--limit=2500 --offset=12500"
+                    - "--limit=2500 --offset=15000"
+                    - "--limit=2500 --offset=17500"
+                    - "--limit=2500 --offset=20000"
+                    - "--limit=2500 --offset=22500"
+                    - "--limit=2500 --offset=25000"
+                    - "--limit=2500 --offset=27500"
+                    - "--limit=2500 --offset=30000"
+                    - "--limit=2500 --offset=32500"
+                    - "--limit=2500 --offset=35000"
+                    - "--limit=2500 --offset=37500"
             max-parallel: 10 # Control total concurrency
             fail-fast: false
         steps:
@@ -55,8 +52,5 @@ jobs:
                   API_CHECK_URL: ${{ vars.API_CHECK_URL || secrets.API_CHECK_URL }}
                   CRON_SECRET: ${{ secrets.CRON_SECRET }}
               run: |
-                  IFS=',' read -ra ADDR <<< "${{ matrix.state }}"
-                  for state in "${ADDR[@]}"; do
-                    echo "--- Pinging $state ---"
-                    npx tsx scripts/monitor-ips.ts --state="$state"
-                  done
+                  echo "--- Running Monitor for Chunk: ${{ matrix.chunk }} ---"
+                  npx tsx scripts/monitor-ips.ts ${{ matrix.chunk }}

@@ -69,7 +69,7 @@ async function fastCheck(
   timestamp: string,
 ): Promise<CheckResult> {
   const startTime = Date.now();
-  const timeoutMs = 5000;
+  const timeoutMs = 2500; // Reduced from 5000 to fail faster towards Deep Scan
   const primaryPort =
     target.services && target.services.length > 0 ? target.services[0] : 80;
 
@@ -180,13 +180,18 @@ async function performCheck(ip: string, port: number, timeoutMs: number): Promis
 }
 
 async function main() {
-  const stateFilter = process.argv
-    .find((arg) => arg.startsWith("--state="))
-    ?.split("=")[1];
+  const args = process.argv;
+  const stateFilter = args.find((arg) => arg.startsWith("--state="))?.split("=")[1];
+  const providerFilter = args.find((arg) => arg.startsWith("--provider="))?.split("=")[1];
+  const limitFilter = args.find((arg) => arg.startsWith("--limit="))?.split("=")[1];
+  const offsetFilter = args.find((arg) => arg.startsWith("--offset="))?.split("=")[1];
+  
   const timestamp = new Date().toISOString();
 
   console.log(`--- Starting External Monitoring Worker ---`);
   if (stateFilter) console.log(`Filter: [State: ${stateFilter}]`);
+  if (providerFilter) console.log(`Filter: [Provider: ${providerFilter}]`);
+  if (limitFilter || offsetFilter) console.log(`Range: [Limit: ${limitFilter || 'ALL'}] [Offset: ${offsetFilter || '0'}]`);
 
   // 1. Fetch Targets (with pagination to bypass 1000 default limit)
   console.log("Fetching monitoring targets...");
@@ -204,6 +209,26 @@ async function main() {
 
     if (stateFilter) {
       query = query.ilike("state", stateFilter);
+    }
+    
+    if (providerFilter) {
+      query = query.ilike("provider", providerFilter);
+    }
+
+    if (offsetFilter) {
+      const baseOffset = parseInt(offsetFilter);
+      query = query.range(baseOffset + (page * PAGE_SIZE), baseOffset + ((page + 1) * PAGE_SIZE) - 1);
+    } else {
+      query = query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    }
+
+    if (limitFilter) {
+      const limit = parseInt(limitFilter);
+      const currentOffset = (offsetFilter ? parseInt(offsetFilter) : 0) + (page * PAGE_SIZE);
+      if (currentOffset + PAGE_SIZE > (offsetFilter ? parseInt(offsetFilter) : 0) + limit) {
+        query = query.range(currentOffset, (offsetFilter ? parseInt(offsetFilter) : 0) + limit - 1);
+        hasMore = false; // Stop after this query
+      }
     }
 
     const { data, error } = await query;
