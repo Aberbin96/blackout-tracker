@@ -88,63 +88,40 @@ async function fastCheck(
   };
 }
 
-async function deepCheck(
+
+
+async function retryCheck(
   target: Target,
   timestamp: string,
 ): Promise<CheckResult> {
-  const startTime = Date.now();
-  const timeoutMs = 5000;
-
-  // 1. Prepare parallel checks: Ping + Common Ports
-  const primaryPort =
-    target.services && target.services.length > 0 ? target.services[0] : 80;
-    
-  const otherPorts =
-    target.services?.length > 1
-      ? target.services.slice(1)
-      : [443, 8291, 22, 21, 53, 3389, 7547, 8080, 8443, 5060].filter((p) => p !== primaryPort);
-
-  // We limit the number of parallel ports per node to avoid overwhelming local resources
-  const portsToTry = [primaryPort, ...otherPorts.slice(0, 5)];
-
-  const checkPromises: Promise<{ success: boolean; code?: string }>[] = [
-    pingIp(target.ip, 3000).then(res => ({ success: res, code: 'ICMP_ECHO' })),
-    ...portsToTry.map(port => performCheck(target.ip, port, timeoutMs))
-  ];
-
-  // Wait for results
-  const results = await Promise.all(
-    checkPromises.map((p, idx) =>
-      p.then((res) => ({ ...res, port: idx === 0 ? undefined : portsToTry[idx - 1] })),
-    ),
-  );
-  const success = results.find((r) => r.success);
-
-  if (success) {
-    return {
-      ip: target.ip,
-      provider: target.provider,
-      state: normalizeStateName(target.state).toLowerCase(),
-      status: "online",
-      latency: Date.now() - startTime,
-      working_port: success.port,
-      error_type: success.code,
-      timeout_ms: timeoutMs,
-      timestamp,
-    };
+  const HEROIC_TIMEOUT = 10000;
+  const portsToTry = [80, 443, 8291]; // Basic common ports for the retry
+  
+  for (const port of portsToTry) {
+    const res = await performCheck(target.ip, port, HEROIC_TIMEOUT);
+    if (res.success) {
+      return {
+        ip: target.ip,
+        provider: target.provider,
+        state: normalizeStateName(target.state).toLowerCase(),
+        status: "online" as const,
+        latency: HEROIC_TIMEOUT / 2, 
+        working_port: port,
+        error_type: "RETRY_" + res.code,
+        timeout_ms: HEROIC_TIMEOUT,
+        timestamp,
+      };
+    }
   }
-
-  // If all failed, find the most descriptive error (usually the first TCP one)
-  const lastError = results.find(r => !r.success && r.code !== 'ICMP_ECHO')?.code;
 
   return {
     ip: target.ip,
     provider: target.provider,
     state: normalizeStateName(target.state).toLowerCase(),
-    status: "offline",
-    latency: Date.now() - startTime,
-    error_type: lastError || "timeout",
-    timeout_ms: timeoutMs,
+    status: "offline" as const,
+    latency: HEROIC_TIMEOUT,
+    error_type: "RETRY_TIMEOUT",
+    timeout_ms: HEROIC_TIMEOUT,
     timestamp,
   };
 }
@@ -258,7 +235,7 @@ async function main() {
   // 2. Phase 1: Fast TCP Scan for all nodes
   console.log(`Phase 1: Fast TCP check on all ${targets.length} nodes...`);
   const initialResults = new Map<string, CheckResult>();
-  const BATCH_SIZE = 80; // Reduced from 100 to spread bandwidth load
+  const BATCH_SIZE = 50; // Lean batch size
 
   for (let i = 0; i < allTargets.length; i += BATCH_SIZE) {
     const batch = allTargets.slice(i, i + BATCH_SIZE);
@@ -275,25 +252,20 @@ async function main() {
       `FastCheck: Block ${i + 1}-${Math.min(i + BATCH_SIZE, allTargets.length)} [${onlineInBatch} ONLINE]`,
     );
     
-    // Add delay to let the network breathe and minimize bandwidth peaks
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 800)); // Conservative delay
   }
 
-  // 3. Phase 2: Deep Scan for potentially offline nodes
-  const offlineIps = Array.from(initialResults.values())
-    .filter((r) => r.status === "offline")
-    .map((r) => r.ip);
-
-  console.log(`Phase 2: Deep Scan for ${offlineIps.length} nodes (ICMP + Sequential ports)...`);
+  // 4. Phase 2: Retry Scan for offline nodes
+  const offlineTargets = allTargets.filter(t => initialResults.get(t.ip)?.status === "offline");
   
-  if (offlineIps.length > 0) {
-    const DEEP_BATCH_SIZE = 60; // Reduced from 100 for gentler profiling
-    const offlineTargets = allTargets.filter(t => offlineIps.includes(t.ip));
+  if (offlineTargets.length > 0) {
+    console.log(`Phase 2: Retry Scan for ${offlineTargets.length} nodes (sequential check)...`);
+    const RETRY_BATCH_SIZE = 40;
 
-    for (let i = 0; i < offlineTargets.length; i += DEEP_BATCH_SIZE) {
-      const batch = offlineTargets.slice(i, i + DEEP_BATCH_SIZE);
+    for (let i = 0; i < offlineTargets.length; i += RETRY_BATCH_SIZE) {
+      const batch = offlineTargets.slice(i, i + RETRY_BATCH_SIZE);
       const batchResults = await Promise.all(
-        batch.map((target) => deepCheck(target, timestamp)),
+        batch.map((target) => retryCheck(target, timestamp)),
       );
 
       batchResults.forEach((r) => {
@@ -302,65 +274,8 @@ async function main() {
         }
       });
       
-      console.log(`DeepCheck: Block ${i + 1}-${Math.min(i + DEEP_BATCH_SIZE, offlineTargets.length)} verified.`);
-      
-      // Delay between deep scan batches
-      await new Promise((r) => setTimeout(r, 600));
-    }
-  }
-
-  // 4. Phase 3: Heroic Retry (Long timeout for persistent timeouts)
-  const stillOfflineIps = Array.from(initialResults.values())
-    .filter((r) => r.status === "offline" && r.error_type === "ETIMEDOUT")
-    .map((r) => r.ip);
-
-  console.log(`Phase 3: Heroic Retry for ${stillOfflineIps.length} nodes (15s timeout)...`);
-
-  if (stillOfflineIps.length > 0) {
-    const HEROIC_BATCH_SIZE = 60; // Reduced from 100
-    const heroicTargets = allTargets.filter(t => stillOfflineIps.includes(t.ip));
-    const HEROIC_TIMEOUT = 10000; // 10s is enough for extreme cases
-
-    for (let i = 0; i < heroicTargets.length; i += HEROIC_BATCH_SIZE) {
-      const batch = heroicTargets.slice(i, i + HEROIC_BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map(async (target) => {
-          // Check top 3 likely ports in parallel for heroic retry
-          const results = await Promise.all([
-            performCheck(target.ip, 80, HEROIC_TIMEOUT),
-            performCheck(target.ip, 443, HEROIC_TIMEOUT),
-            performCheck(target.ip, 8291, HEROIC_TIMEOUT)
-          ]);
-          
-            const heroicPorts = [80, 443, 8291];
-            const successIndex = results.findIndex(r => r.success);
-            const success = results[successIndex];
-
-            if (success) {
-              return {
-                ip: target.ip,
-                provider: target.provider,
-                state: normalizeStateName(target.state).toLowerCase(),
-                status: "online" as const,
-                latency: HEROIC_TIMEOUT / 2, 
-                working_port: heroicPorts[successIndex],
-                error_type: "HEROIC_" + success.code,
-                timeout_ms: HEROIC_TIMEOUT,
-                timestamp,
-              };
-            }
-          return null;
-        }),
-      );
-
-      batchResults.forEach((r) => {
-        if (r) initialResults.set(r.ip, r);
-      });
-
-      console.log(`HeroicCheck: Block ${i + 1}-${Math.min(i + HEROIC_BATCH_SIZE, heroicTargets.length)} complete.`);
-      
-      // Delay between heroic batches
-      await new Promise((r) => setTimeout(r, 600));
+      console.log(`RetryCheck: Block ${i + 1}-${Math.min(i + RETRY_BATCH_SIZE, offlineTargets.length)} complete.`);
+      await new Promise((r) => setTimeout(r, 1000)); // Extra gentle delay
     }
   }
 
