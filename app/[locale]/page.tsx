@@ -4,13 +4,7 @@ import { DashboardStats } from "@/components/DashboardStats";
 import { RegionalTable } from "@/components/RegionalTable";
 import nextDynamic from "next/dynamic";
 import { NodeComposition } from "@/components/NodeComposition";
-const MapWrapper = nextDynamic(
-  () => import("@/components/MapWrapper").then((mod) => mod.MapWrapper),
-  {
-    ssr: false,
-    loading: () => <MapLoader />,
-  },
-);
+import { MapWrapper } from "@/components/MapWrapper";
 import {
   getDashboardStats,
   getRegionalStats,
