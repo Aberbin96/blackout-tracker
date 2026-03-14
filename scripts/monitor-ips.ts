@@ -101,34 +101,28 @@ async function retryCheck(
   target: Target,
   timestamp: string,
 ): Promise<CheckResult> {
-  const HEROIC_TIMEOUT = 10000;
-  const portsToTry = [80, 443, 8291]; // Basic common ports for the retry
-  
-  for (const port of portsToTry) {
-    const res = await performCheck(target.ip, port, HEROIC_TIMEOUT);
-    if (res.success) {
-      return {
-        ip: target.ip,
-        provider: target.provider,
-        state: normalizeStateName(target.state).toLowerCase(),
-        status: "online" as const,
-        latency: HEROIC_TIMEOUT / 2, 
-        working_port: port,
-        error_type: "RETRY_" + res.code,
-        timeout_ms: HEROIC_TIMEOUT,
-        timestamp,
-      };
-    }
-  }
+  const startTime = Date.now();
+  const RETRY_TIMEOUT = 10000;
+  const primaryPort =
+    target.services && target.services.length > 0 ? target.services[0] : 80;
+
+  // Serial check uses ICMP and Primary Port with a longer timeout
+  const [icmpRes, tcpRes] = await Promise.all([
+    pingIp(target.ip, 5000),
+    performCheck(target.ip, primaryPort, RETRY_TIMEOUT)
+  ]);
+
+  const isOnline = icmpRes || tcpRes.success;
 
   return {
     ip: target.ip,
     provider: target.provider,
     state: normalizeStateName(target.state).toLowerCase(),
-    status: "offline" as const,
-    latency: HEROIC_TIMEOUT,
-    error_type: "RETRY_TIMEOUT",
-    timeout_ms: HEROIC_TIMEOUT,
+    status: isOnline ? "online" : "offline",
+    latency: Date.now() - startTime,
+    working_port: tcpRes.success ? primaryPort : undefined,
+    error_type: tcpRes.success ? "RETRY_OPEN" : (icmpRes ? "RETRY_ICMP_ONLY" : "RETRY_" + tcpRes.code),
+    timeout_ms: RETRY_TIMEOUT,
     timestamp,
   };
 }
@@ -240,9 +234,9 @@ async function main() {
   console.log(`Found ${targets.length} targets to monitor.`);
 
   // 2. Phase 1: Fast TCP Scan for all nodes
-  console.log(`Phase 1: Fast TCP check on all ${targets.length} nodes...`);
+  console.log(`Phase 1: Hybrid check on all ${targets.length} nodes...`);
   const initialResults = new Map<string, CheckResult>();
-  const BATCH_SIZE = 50; // Lean batch size
+  const BATCH_SIZE = 25; // Smaller batch size for high stability
 
   for (let i = 0; i < allTargets.length; i += BATCH_SIZE) {
     const batch = allTargets.slice(i, i + BATCH_SIZE);
@@ -256,33 +250,32 @@ async function main() {
 
     const onlineInBatch = batchResults.filter((r) => r.status === "online").length;
     console.log(
-      `FastCheck: Block ${i + 1}-${Math.min(i + BATCH_SIZE, allTargets.length)} [${onlineInBatch} ONLINE]`,
+      `Phase 1: Block ${i + 1}-${Math.min(i + BATCH_SIZE, allTargets.length)} [${onlineInBatch} ONLINE]`,
     );
     
-    await new Promise((r) => setTimeout(r, 800)); // Conservative delay
+    await new Promise((r) => setTimeout(r, 1000)); // Conservative delay
   }
 
-  // 4. Phase 2: Retry Scan for offline nodes
+  // 4. Phase 2: Serial Retry Scan for offline nodes
   const offlineTargets = allTargets.filter(t => initialResults.get(t.ip)?.status === "offline");
   
   if (offlineTargets.length > 0) {
-    console.log(`Phase 2: Retry Scan for ${offlineTargets.length} nodes (sequential check)...`);
-    const RETRY_BATCH_SIZE = 40;
+    console.log(`Phase 2: Serial Retry for ${offlineTargets.length} nodes (one-by-one)...`);
+    
+    for (let i = 0; i < offlineTargets.length; i++) {
+      const target = offlineTargets[i];
+      const result = await retryCheck(target, timestamp);
 
-    for (let i = 0; i < offlineTargets.length; i += RETRY_BATCH_SIZE) {
-      const batch = offlineTargets.slice(i, i + RETRY_BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map((target) => retryCheck(target, timestamp)),
-      );
-
-      batchResults.forEach((r) => {
-        if (r.status === "online") {
-          initialResults.set(r.ip, r);
-        }
-      });
+      if (result.status === "online") {
+        initialResults.set(target.ip, result);
+      }
       
-      console.log(`RetryCheck: Block ${i + 1}-${Math.min(i + RETRY_BATCH_SIZE, offlineTargets.length)} complete.`);
-      await new Promise((r) => setTimeout(r, 1000)); // Extra gentle delay
+      if ((i + 1) % 50 === 0 || i === offlineTargets.length - 1) {
+        console.log(`Phase 2: Verified ${i + 1}/${offlineTargets.length} nodes.`);
+      }
+
+      // Small delay between each sequential node to completely eliminate spikes
+      await new Promise((r) => setTimeout(r, 50)); 
     }
   }
 
