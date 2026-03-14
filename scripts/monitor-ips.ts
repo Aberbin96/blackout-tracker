@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { normalizeStateName } from "../utils/normalization";
 
 const execAsync = promisify(exec);
 
@@ -69,7 +70,7 @@ async function fastCheck(
   timestamp: string,
 ): Promise<CheckResult> {
   const startTime = Date.now();
-  const timeoutMs = 2500; // Reduced from 5000 to fail faster towards Deep Scan
+  const timeoutMs = 5000; // Increased from 2500 for better reliability with 2-packet pings
   const primaryPort =
     target.services && target.services.length > 0 ? target.services[0] : 80;
 
@@ -77,7 +78,7 @@ async function fastCheck(
   return {
     ip: target.ip,
     provider: target.provider,
-    state: target.state,
+    state: normalizeStateName(target.state).toLowerCase(),
     status: res.success ? "online" : "offline",
     latency: Date.now() - startTime,
     working_port: res.success ? primaryPort : undefined,
@@ -123,7 +124,7 @@ async function deepCheck(
     return {
       ip: target.ip,
       provider: target.provider,
-      state: target.state,
+      state: normalizeStateName(target.state).toLowerCase(),
       status: "online",
       latency: Date.now() - startTime,
       working_port: success.port,
@@ -139,7 +140,7 @@ async function deepCheck(
   return {
     ip: target.ip,
     provider: target.provider,
-    state: target.state,
+    state: normalizeStateName(target.state).toLowerCase(),
     status: "offline",
     latency: Date.now() - startTime,
     error_type: lastError || "timeout",
@@ -257,7 +258,7 @@ async function main() {
   // 2. Phase 1: Fast TCP Scan for all nodes
   console.log(`Phase 1: Fast TCP check on all ${targets.length} nodes...`);
   const initialResults = new Map<string, CheckResult>();
-  const BATCH_SIZE = 100; // Reduced from 500 to prevent network saturation
+  const BATCH_SIZE = 80; // Reduced from 100 to spread bandwidth load
 
   for (let i = 0; i < allTargets.length; i += BATCH_SIZE) {
     const batch = allTargets.slice(i, i + BATCH_SIZE);
@@ -274,8 +275,8 @@ async function main() {
       `FastCheck: Block ${i + 1}-${Math.min(i + BATCH_SIZE, allTargets.length)} [${onlineInBatch} ONLINE]`,
     );
     
-    // Add small delay to let the network breathe
-    await new Promise((r) => setTimeout(r, 200));
+    // Add delay to let the network breathe and minimize bandwidth peaks
+    await new Promise((r) => setTimeout(r, 600));
   }
 
   // 3. Phase 2: Deep Scan for potentially offline nodes
@@ -286,7 +287,7 @@ async function main() {
   console.log(`Phase 2: Deep Scan for ${offlineIps.length} nodes (ICMP + Sequential ports)...`);
   
   if (offlineIps.length > 0) {
-    const DEEP_BATCH_SIZE = 100; // Reduced from 300
+    const DEEP_BATCH_SIZE = 60; // Reduced from 100 for gentler profiling
     const offlineTargets = allTargets.filter(t => offlineIps.includes(t.ip));
 
     for (let i = 0; i < offlineTargets.length; i += DEEP_BATCH_SIZE) {
@@ -304,7 +305,7 @@ async function main() {
       console.log(`DeepCheck: Block ${i + 1}-${Math.min(i + DEEP_BATCH_SIZE, offlineTargets.length)} verified.`);
       
       // Delay between deep scan batches
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 600));
     }
   }
 
@@ -316,7 +317,7 @@ async function main() {
   console.log(`Phase 3: Heroic Retry for ${stillOfflineIps.length} nodes (15s timeout)...`);
 
   if (stillOfflineIps.length > 0) {
-    const HEROIC_BATCH_SIZE = 100; // Reduced from 300
+    const HEROIC_BATCH_SIZE = 60; // Reduced from 100
     const heroicTargets = allTargets.filter(t => stillOfflineIps.includes(t.ip));
     const HEROIC_TIMEOUT = 10000; // 10s is enough for extreme cases
 
@@ -339,7 +340,7 @@ async function main() {
               return {
                 ip: target.ip,
                 provider: target.provider,
-                state: target.state,
+                state: normalizeStateName(target.state).toLowerCase(),
                 status: "online" as const,
                 latency: HEROIC_TIMEOUT / 2, 
                 working_port: heroicPorts[successIndex],
@@ -359,7 +360,7 @@ async function main() {
       console.log(`HeroicCheck: Block ${i + 1}-${Math.min(i + HEROIC_BATCH_SIZE, heroicTargets.length)} complete.`);
       
       // Delay between heroic batches
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 600));
     }
   }
 
