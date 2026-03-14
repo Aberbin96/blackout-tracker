@@ -32,7 +32,8 @@
         },
         "map": {
             "title": "Live Connectivity Map",
-            "detected": "Detected Nodes"
+            "detected": "Detected Nodes",
+            "loading": "Loading Live Map..."
         },
         "table": {
             "title": "Regional Status Overview",

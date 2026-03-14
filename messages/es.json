@@ -32,7 +32,8 @@
         },
         "map": {
             "title": "Mapa de Conectividad en Vivo",
-            "detected": "Nodos Detectados"
+            "detected": "Nodos Detectados",
+            "loading": "Cargando Mapa en Vivo..."
         },
         "table": {
             "title": "Resumen de Estado Regional",

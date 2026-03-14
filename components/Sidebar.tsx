@@ -86,11 +86,12 @@ export function Sidebar({
           </h2>
 
           <div className="space-y-3">
-            <label className="text-[10px] font-black text-secondary dark:text-accent uppercase italic">
+            <label htmlFor="state-filter" className="text-[10px] font-black text-secondary dark:text-accent uppercase italic">
               {t("sidebar.region")}
             </label>
             <div className="relative">
               <select
+                id="state-filter"
                 value={activeState}
                 onChange={(e) => handleFilterChange("state", e.target.value)}
                 className="w-full bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border border-slate-200 dark:border-white/10 text-primary dark:text-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-accent transition-all appearance-none cursor-pointer pr-10"
@@ -110,11 +111,12 @@ export function Sidebar({
           </div>
 
           <div className="space-y-3">
-            <label className="text-[10px] font-black text-secondary dark:text-accent uppercase italic">
+            <label htmlFor="provider-filter" className="text-[10px] font-black text-secondary dark:text-accent uppercase italic">
               {t("sidebar.backbone")}
             </label>
             <div className="relative">
               <select
+                id="provider-filter"
                 value={activeProvider}
                 onChange={(e) => handleFilterChange("provider", e.target.value)}
                 className="w-full bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border border-slate-200 dark:border-white/10 text-primary dark:text-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-accent transition-all appearance-none cursor-pointer pr-10"

@@ -100,20 +100,44 @@ async function main() {
   console.log(`--- Starting External Monitoring Worker ---`);
   if (stateFilter) console.log(`Filter: [State: ${stateFilter}]`);
 
-  // 1. Fetch Targets
-  let query = supabase
-    .from("monitoring_targets")
-    .select("id, ip, provider, state, services")
-    .eq("is_active", true);
-  if (stateFilter) {
-    query = query.ilike("state", stateFilter);
+  // 1. Fetch Targets (with pagination to bypass 1000 default limit)
+  console.log("Fetching monitoring targets...");
+  const allTargets: Target[] = [];
+  let page = 0;
+  const PAGE_SIZE = 1000;
+  let hasMore = true;
+
+  while (hasMore) {
+    let query = supabase
+      .from("monitoring_targets")
+      .select("id, ip, provider, state, services")
+      .eq("is_active", true)
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+    if (stateFilter) {
+      query = query.ilike("state", stateFilter);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error fetching targets:", error);
+      process.exit(1);
+    }
+
+    if (data && data.length > 0) {
+      allTargets.push(...(data as Target[]));
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    } else {
+      hasMore = false;
+    }
   }
 
-  const { data: targets, error } = await query;
-  if (error || !targets) {
-    console.error("Error fetching targets:", error);
-    process.exit(1);
-  }
+  const targets = allTargets;
 
   console.log(`Found ${targets.length} targets to monitor.`);
 

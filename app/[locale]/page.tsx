@@ -4,7 +4,13 @@ import { DashboardStats } from "@/components/DashboardStats";
 import { RegionalTable } from "@/components/RegionalTable";
 import nextDynamic from "next/dynamic";
 import { NodeComposition } from "@/components/NodeComposition";
-import { MapWrapper } from "@/components/MapWrapper";
+const MapWrapper = nextDynamic(
+  () => import("@/components/MapWrapper").then((mod) => mod.MapWrapper),
+  {
+    ssr: false,
+    loading: () => <MapLoader />,
+  },
+);
 import {
   getDashboardStats,
   getRegionalStats,
@@ -15,6 +21,7 @@ import {
   getActiveBlackouts,
 } from "@/services/stats";
 import { HistoricalChartsWrapper as HistoricalCharts } from "@/components/wrappers/HistoricalChartsWrapper";
+import { MapLoader } from "@/components/MapLoader";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 600;
