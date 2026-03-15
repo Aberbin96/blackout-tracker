@@ -71,16 +71,21 @@ async function fastCheck(
 ): Promise<CheckResult> {
   const startTime = Date.now();
   const timeoutMs = 5000;
-  const primaryPort =
-    target.services && target.services.length > 0 ? target.services[0] : 80;
+  const primaryPort = target.services?.[0] || 80;
+  const commonPorts = [80, 443, 8291, 7547, 8080, 22, 53, 3389, 8443, 5060];
+  const portsToTry = Array.from(new Set([primaryPort, ...commonPorts]));
 
-  // Run ICMP (Ping) and TCP Check in parallel
-  const [icmpRes, tcpRes] = await Promise.all([
+  // Run ICMP (Ping) and Top Ports in parallel
+  const results = await Promise.all([
     pingIp(target.ip, 3000),
-    performCheck(target.ip, primaryPort, timeoutMs)
+    ...portsToTry.map(port => performCheck(target.ip, port, timeoutMs))
   ]);
 
-  const isOnline = icmpRes || tcpRes.success;
+  const icmpRes = results[0] as boolean;
+  const tcpResults = results.slice(1) as { success: boolean; code?: string }[];
+  const successIndex = tcpResults.findIndex(r => r.success);
+  
+  const isOnline = icmpRes || successIndex !== -1;
 
   return {
     ip: target.ip,
@@ -88,14 +93,12 @@ async function fastCheck(
     state: normalizeStateName(target.state).toLowerCase(),
     status: isOnline ? "online" : "offline",
     latency: Date.now() - startTime,
-    working_port: tcpRes.success ? primaryPort : (icmpRes ? undefined : undefined),
-    error_type: tcpRes.success ? "OPEN" : (icmpRes ? "ICMP_ONLY" : tcpRes.code),
+    working_port: successIndex !== -1 ? portsToTry[successIndex] : undefined,
+    error_type: successIndex !== -1 ? "DISCOVERY_OPEN" : (icmpRes ? "ICMP_ONLY" : tcpResults[0]?.code),
     timeout_ms: timeoutMs,
     timestamp,
   };
 }
-
-
 
 async function retryCheck(
   target: Target,
@@ -103,16 +106,21 @@ async function retryCheck(
 ): Promise<CheckResult> {
   const startTime = Date.now();
   const RETRY_TIMEOUT = 10000;
-  const primaryPort =
-    target.services && target.services.length > 0 ? target.services[0] : 80;
+  const primaryPort = target.services?.[0] || 80;
+  const commonPorts = [80, 443, 8291, 7547, 8080, 22, 53, 3389, 8443]; // Expanded list to restore previous discovery power
+  const portsToTry = Array.from(new Set([primaryPort, ...commonPorts]));
 
-  // Serial check uses ICMP and Primary Port with a longer timeout
-  const [icmpRes, tcpRes] = await Promise.all([
+  // Multi-discovery retry
+  const results = await Promise.all([
     pingIp(target.ip, 5000),
-    performCheck(target.ip, primaryPort, RETRY_TIMEOUT)
+    ...portsToTry.map(port => performCheck(target.ip, port, RETRY_TIMEOUT))
   ]);
 
-  const isOnline = icmpRes || tcpRes.success;
+  const icmpRes = results[0] as boolean;
+  const tcpResults = results.slice(1) as { success: boolean; code?: string }[];
+  const successIndex = tcpResults.findIndex(r => r.success);
+
+  const isOnline = icmpRes || successIndex !== -1;
 
   return {
     ip: target.ip,
@@ -120,8 +128,8 @@ async function retryCheck(
     state: normalizeStateName(target.state).toLowerCase(),
     status: isOnline ? "online" : "offline",
     latency: Date.now() - startTime,
-    working_port: tcpRes.success ? primaryPort : undefined,
-    error_type: tcpRes.success ? "RETRY_OPEN" : (icmpRes ? "RETRY_ICMP_ONLY" : "RETRY_" + tcpRes.code),
+    working_port: successIndex !== -1 ? portsToTry[successIndex] : undefined,
+    error_type: successIndex !== -1 ? "RETRY_OPEN" : (icmpRes ? "RETRY_ICMP_ONLY" : "RETRY_TIMEOUT"),
     timeout_ms: RETRY_TIMEOUT,
     timestamp,
   };
@@ -233,10 +241,10 @@ async function main() {
 
   console.log(`Found ${targets.length} targets to monitor.`);
 
-  // 2. Phase 1: Fast TCP Scan for all nodes
-  console.log(`Phase 1: Hybrid check on all ${targets.length} nodes...`);
+  // 2. Phase 1: Fast Hybrid Scan for all nodes
+  console.log(`Phase 1: Discovery-Rich check on all ${targets.length} nodes...`);
   const initialResults = new Map<string, CheckResult>();
-  const BATCH_SIZE = 25; // Smaller batch size for high stability
+  const BATCH_SIZE = 20; // Reduced to 20 for high stability with multi-port checks
 
   for (let i = 0; i < allTargets.length; i += BATCH_SIZE) {
     const batch = allTargets.slice(i, i + BATCH_SIZE);
@@ -256,26 +264,31 @@ async function main() {
     await new Promise((r) => setTimeout(r, 1000)); // Conservative delay
   }
 
-  // 4. Phase 2: Serial Retry Scan for offline nodes
+  // 4. Phase 2: Micro-Batch Retry Scan for offline nodes
   const offlineTargets = allTargets.filter(t => initialResults.get(t.ip)?.status === "offline");
   
   if (offlineTargets.length > 0) {
-    console.log(`Phase 2: Serial Retry for ${offlineTargets.length} nodes (one-by-one)...`);
+    console.log(`Phase 2: Micro-Batch Retry for ${offlineTargets.length} nodes (8 at a time)...`);
+    const RETRY_BATCH_SIZE = 8;
     
-    for (let i = 0; i < offlineTargets.length; i++) {
-      const target = offlineTargets[i];
-      const result = await retryCheck(target, timestamp);
+    for (let i = 0; i < offlineTargets.length; i += RETRY_BATCH_SIZE) {
+      const batch = offlineTargets.slice(i, i + RETRY_BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map((target) => retryCheck(target, timestamp)),
+      );
 
-      if (result.status === "online") {
-        initialResults.set(target.ip, result);
-      }
+      batchResults.forEach((result) => {
+        if (result.status === "online") {
+          initialResults.set(result.ip, result);
+        }
+      });
       
-      if ((i + 1) % 50 === 0 || i === offlineTargets.length - 1) {
-        console.log(`Phase 2: Verified ${i + 1}/${offlineTargets.length} nodes.`);
+      if ((i + RETRY_BATCH_SIZE) % 50 === 0 || i + RETRY_BATCH_SIZE >= offlineTargets.length) {
+        console.log(`Phase 2: Verified ${Math.min(i + RETRY_BATCH_SIZE, offlineTargets.length)}/${offlineTargets.length} nodes.`);
       }
 
-      // Small delay between each sequential node to completely eliminate spikes
-      await new Promise((r) => setTimeout(r, 50)); 
+      // Small delay between micro-batches
+      await new Promise((r) => setTimeout(r, 200)); 
     }
   }
 
