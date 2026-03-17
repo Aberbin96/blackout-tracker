@@ -1,9 +1,9 @@
 name: 📡 Ping Nodes (Cron)
 
 on:
-    # schedule:
-    #     # Run every 5 minutes to keep stats fresh and analyzer responsive
-    #     - cron: "*/5 * * * *"
+    schedule:
+        # Run every 8 hours (3 times a day)
+        - cron: "0 */8 * * *"
     workflow_dispatch: # Allows you to manually trigger it from the GitHub Actions tab
 
 env:
