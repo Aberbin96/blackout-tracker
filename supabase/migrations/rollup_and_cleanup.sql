@@ -39,7 +39,7 @@ BEGIN
   WHERE timestamp < (CURRENT_DATE - INTERVAL '14 days');
 
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 -- 3. (Optional) Instructions for pg_cron setup in Supabase:
 -- To run this automatically every night at 1:00 AM UTC, you would run:

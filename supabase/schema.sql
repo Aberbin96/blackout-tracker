@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS scanned_prefixes (
     scanned_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Enable RLS for scanned_prefixes
+ALTER TABLE scanned_prefixes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all management" ON scanned_prefixes FOR ALL USING (true) WITH CHECK (true);
+
 -- Table to store the inventory of IPs to monitor
 CREATE TABLE IF NOT EXISTS monitoring_targets (
     id BIGSERIAL PRIMARY KEY,

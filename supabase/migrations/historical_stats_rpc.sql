@@ -36,4 +36,4 @@ BEGIN
   GROUP BY 1, 2
   ORDER BY 1 ASC;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;

@@ -10,14 +10,20 @@ import { classifyDevice, detectNetworkType } from "../utils/classifier";
 dotenv.config({ path: path.join(process.cwd(), ".env.local") });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   console.error("Error: Supabase credentials not found in .env.local");
   process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+// If using service role key, we bypass RLS correctly
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+});
 
 /**
  * Simple TCP port check

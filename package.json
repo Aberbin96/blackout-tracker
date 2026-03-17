@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "monitor": "npx tsx scripts/monitor-ips.ts",
-    "verify-state": "npx tsx scripts/verify-state.ts"
+    "verify-state": "npx tsx scripts/verify-state.ts",
+    "enrich": "npx tsx scripts/enrich-ips.ts"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.40.0",
