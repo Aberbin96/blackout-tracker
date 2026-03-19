@@ -28,9 +28,9 @@ async function calculateStability(target: any): Promise<number> {
   let score = 20; // Base score
 
   // 1. Longevity (max 40 points)
-  const createdAt = new Date(target.created_at);
-  const daysOld = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
-  score += Math.min(daysOld, 40);
+  const referenceDate = new Date(target.last_ip_change_at || target.created_at);
+  const daysOld = Math.floor((Date.now() - referenceDate.getTime()) / (1000 * 60 * 60 * 24));
+  score += Math.min(Math.max(0, daysOld), 40);
 
   // 2. Mobile Check
   if (target.is_mobile || target.network_type === "mobile") {
@@ -38,10 +38,11 @@ async function calculateStability(target: any): Promise<number> {
   }
 
   // 3. DNS/Hostname Check
-  if (target.hostname) {
-    const host = target.hostname.toLowerCase();
+  const hostNameToCheck = target.hostname || target.classification_metadata?.ptr_record;
+  if (hostNameToCheck) {
+    const host = hostNameToCheck.toLowerCase();
     const dynamicKeywords = ["dynamic", "pool", "dhcp", "customer", "dsl", "dialup", "user"];
-    const isLikelyDynamic = dynamicKeywords.some(keyword => host.includes(keyword));
+    const isLikelyDynamic = dynamicKeywords.some((keyword: string) => host.includes(keyword));
     
     if (isLikelyDynamic) {
         score -= 20;
@@ -63,7 +64,7 @@ async function main() {
   while (true) {
     const { data: targets, error } = await supabase
       .from("monitoring_targets")
-      .select("id, ip, created_at, hostname, is_mobile, network_type")
+      .select("id, ip, created_at, last_ip_change_at, hostname, classification_metadata, is_mobile, network_type")
       .order("id", { ascending: true })
       .range(offset, offset + BATCH_SIZE - 1);
 
