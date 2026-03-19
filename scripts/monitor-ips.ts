@@ -13,7 +13,7 @@ const execAsync = promisify(exec);
 dotenv.config({ path: path.join(process.cwd(), ".env.local") });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 const apiUrl = process.env.API_CHECK_URL;
 const cronSecret = process.env.CRON_SECRET;
 
@@ -23,7 +23,7 @@ if (!supabaseUrl) {
 }
 if (!supabaseKey) {
   console.error(
-    "Error: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY (or SUPABASE_KEY) is missing",
+    "Error: SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY is missing",
   );
   process.exit(1);
 }
