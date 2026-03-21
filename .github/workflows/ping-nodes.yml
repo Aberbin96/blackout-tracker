@@ -1,10 +1,10 @@
-name: 📡 Ping Nodes (Cron)
+name: 📡 Ping Nodes (Daily Full Scan)
 
 on:
     schedule:
-        # Run every 8 hours (3 times a day)
-        - cron: "0 */8 * * *"
-    workflow_dispatch: # Allows you to manually trigger it from the GitHub Actions tab
+        # Run daily at midnight to refresh all nodes
+        - cron: "0 0 * * *"
+    workflow_dispatch:
 
 env:
     FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -52,11 +52,12 @@ jobs:
 
             - name: Run Monitoring Worker
               env:
-                  NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
-                  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ secrets.SUPABASE_KEY || secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
+                  SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+                  SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
                   SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-                  API_CHECK_URL: ${{ vars.API_CHECK_URL || secrets.API_CHECK_URL }}
+                  API_CHECK_URL: ${{ vars.API_CHECK_URL }}
                   CRON_SECRET: ${{ secrets.CRON_SECRET }}
+                  MIN_STABILITY_SCORE: 0
               run: |
                   echo "--- Running Monitor for Chunk: ${{ matrix.chunk }} ---"
                   npx tsx scripts/monitor-ips.ts ${{ matrix.chunk }}

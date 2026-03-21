@@ -12,18 +12,22 @@ const execAsync = promisify(exec);
 // Load environment variables
 dotenv.config({ path: path.join(process.cwd(), ".env.local") });
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 const apiUrl = process.env.API_CHECK_URL;
 const cronSecret = process.env.CRON_SECRET;
+const minStabilityScoreEnv = parseInt(
+  process.env.MIN_STABILITY_SCORE || process.env.MIN_STABILITY_SCORE || "10",
+);
 
 if (!supabaseUrl) {
-  console.error("Error: NEXT_PUBLIC_SUPABASE_URL is missing");
+  console.error("Error: SUPABASE_URL is missing");
   process.exit(1);
 }
 if (!supabaseKey) {
   console.error(
-    "Error: SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY is missing",
+    "Error: SUPABASE_SERVICE_ROLE_KEY or SUPABASE_PUBLISHABLE_DEFAULT_KEY is missing",
   );
   process.exit(1);
 }
@@ -36,6 +40,7 @@ interface Target {
   provider: string;
   state: string;
   services: number[];
+  stability_score?: number;
 }
 
 interface CheckResult {
@@ -54,10 +59,11 @@ async function pingIp(ip: string, timeoutMs: number): Promise<boolean> {
   try {
     const platform = process.platform;
     // -c 3: three packets, -W: timeout in ms per packet
-    const cmd = platform === "win32" 
-      ? `ping -n 2 -w ${timeoutMs} ${ip}` 
-      : `ping -c 2 -W ${Math.ceil(timeoutMs / 1000)} ${ip}`;
-    
+    const cmd =
+      platform === "win32"
+        ? `ping -n 2 -w ${timeoutMs} ${ip}`
+        : `ping -c 2 -W ${Math.ceil(timeoutMs / 1000)} ${ip}`;
+
     await execAsync(cmd);
     return true;
   } catch {
@@ -78,13 +84,13 @@ async function fastCheck(
   // Run ICMP (Ping) and Top Ports in parallel
   const results = await Promise.all([
     pingIp(target.ip, 3000),
-    ...portsToTry.map(port => performCheck(target.ip, port, timeoutMs))
+    ...portsToTry.map((port) => performCheck(target.ip, port, timeoutMs)),
   ]);
 
   const icmpRes = results[0] as boolean;
   const tcpResults = results.slice(1) as { success: boolean; code?: string }[];
-  const successIndex = tcpResults.findIndex(r => r.success);
-  
+  const successIndex = tcpResults.findIndex((r) => r.success);
+
   const isOnline = icmpRes || successIndex !== -1;
 
   return {
@@ -94,7 +100,12 @@ async function fastCheck(
     status: isOnline ? "online" : "offline",
     latency: Date.now() - startTime,
     working_port: successIndex !== -1 ? portsToTry[successIndex] : undefined,
-    error_type: successIndex !== -1 ? "DISCOVERY_OPEN" : (icmpRes ? "ICMP_ONLY" : tcpResults[0]?.code),
+    error_type:
+      successIndex !== -1
+        ? "DISCOVERY_OPEN"
+        : icmpRes
+          ? "ICMP_ONLY"
+          : tcpResults[0]?.code,
     timeout_ms: timeoutMs,
     timestamp,
   };
@@ -113,12 +124,12 @@ async function retryCheck(
   // Multi-discovery retry
   const results = await Promise.all([
     pingIp(target.ip, 5000),
-    ...portsToTry.map(port => performCheck(target.ip, port, RETRY_TIMEOUT))
+    ...portsToTry.map((port) => performCheck(target.ip, port, RETRY_TIMEOUT)),
   ]);
 
   const icmpRes = results[0] as boolean;
   const tcpResults = results.slice(1) as { success: boolean; code?: string }[];
-  const successIndex = tcpResults.findIndex(r => r.success);
+  const successIndex = tcpResults.findIndex((r) => r.success);
 
   const isOnline = icmpRes || successIndex !== -1;
 
@@ -129,13 +140,22 @@ async function retryCheck(
     status: isOnline ? "online" : "offline",
     latency: Date.now() - startTime,
     working_port: successIndex !== -1 ? portsToTry[successIndex] : undefined,
-    error_type: successIndex !== -1 ? "RETRY_OPEN" : (icmpRes ? "RETRY_ICMP_ONLY" : "RETRY_TIMEOUT"),
+    error_type:
+      successIndex !== -1
+        ? "RETRY_OPEN"
+        : icmpRes
+          ? "RETRY_ICMP_ONLY"
+          : "RETRY_TIMEOUT",
     timeout_ms: RETRY_TIMEOUT,
     timestamp,
   };
 }
 
-async function performCheck(ip: string, port: number, timeoutMs: number): Promise<{ success: boolean; code?: string }> {
+async function performCheck(
+  ip: string,
+  port: number,
+  timeoutMs: number,
+): Promise<{ success: boolean; code?: string }> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     socket.setTimeout(timeoutMs);
@@ -168,17 +188,35 @@ async function performCheck(ip: string, port: number, timeoutMs: number): Promis
 
 async function main() {
   const args = process.argv;
-  const stateFilter = args.find((arg) => arg.startsWith("--state="))?.split("=")[1];
-  const providerFilter = args.find((arg) => arg.startsWith("--provider="))?.split("=")[1];
-  const limitFilter = args.find((arg) => arg.startsWith("--limit="))?.split("=")[1];
-  const offsetFilter = args.find((arg) => arg.startsWith("--offset="))?.split("=")[1];
-  
+  const stateFilter = args
+    .find((arg) => arg.startsWith("--state="))
+    ?.split("=")[1];
+  const providerFilter = args
+    .find((arg) => arg.startsWith("--provider="))
+    ?.split("=")[1];
+  const limitFilter = args
+    .find((arg) => arg.startsWith("--limit="))
+    ?.split("=")[1];
+  const offsetFilter = args
+    .find((arg) => arg.startsWith("--offset="))
+    ?.split("=")[1];
+  const minScoreFilter = args
+    .find((arg) => arg.startsWith("--min-score="))
+    ?.split("=")[1];
+  const minScore = minScoreFilter
+    ? parseInt(minScoreFilter)
+    : minStabilityScoreEnv;
+
   const timestamp = new Date().toISOString();
 
   console.log(`--- Starting External Monitoring Worker ---`);
   if (stateFilter) console.log(`Filter: [State: ${stateFilter}]`);
   if (providerFilter) console.log(`Filter: [Provider: ${providerFilter}]`);
-  if (limitFilter || offsetFilter) console.log(`Range: [Limit: ${limitFilter || 'ALL'}] [Offset: ${offsetFilter || '0'}]`);
+  console.log(`Filter: [Min Score: ${minScore}]`);
+  if (limitFilter || offsetFilter)
+    console.log(
+      `Range: [Limit: ${limitFilter || "ALL"}] [Offset: ${offsetFilter || "0"}]`,
+    );
 
   // 1. Fetch Targets (with pagination to bypass 1000 default limit)
   console.log("Fetching monitoring targets...");
@@ -190,30 +228,41 @@ async function main() {
   while (hasMore) {
     let query = supabase
       .from("monitoring_targets")
-      .select("id, ip, provider, state, services")
+      .select("id, ip, provider, state, services, stability_score")
       .eq("is_active", true)
+      .gte("stability_score", minScore)
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
     if (stateFilter) {
       query = query.ilike("state", stateFilter);
     }
-    
+
     if (providerFilter) {
       query = query.ilike("provider", providerFilter);
     }
 
     if (offsetFilter) {
       const baseOffset = parseInt(offsetFilter);
-      query = query.range(baseOffset + (page * PAGE_SIZE), baseOffset + ((page + 1) * PAGE_SIZE) - 1);
+      query = query.range(
+        baseOffset + page * PAGE_SIZE,
+        baseOffset + (page + 1) * PAGE_SIZE - 1,
+      );
     } else {
       query = query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
     }
 
     if (limitFilter) {
       const limit = parseInt(limitFilter);
-      const currentOffset = (offsetFilter ? parseInt(offsetFilter) : 0) + (page * PAGE_SIZE);
-      if (currentOffset + PAGE_SIZE > (offsetFilter ? parseInt(offsetFilter) : 0) + limit) {
-        query = query.range(currentOffset, (offsetFilter ? parseInt(offsetFilter) : 0) + limit - 1);
+      const currentOffset =
+        (offsetFilter ? parseInt(offsetFilter) : 0) + page * PAGE_SIZE;
+      if (
+        currentOffset + PAGE_SIZE >
+        (offsetFilter ? parseInt(offsetFilter) : 0) + limit
+      ) {
+        query = query.range(
+          currentOffset,
+          (offsetFilter ? parseInt(offsetFilter) : 0) + limit - 1,
+        );
         hasMore = false; // Stop after this query
       }
     }
@@ -242,7 +291,9 @@ async function main() {
   console.log(`Found ${targets.length} targets to monitor.`);
 
   // 2. Phase 1: Fast Hybrid Scan for all nodes
-  console.log(`Phase 1: Discovery-Rich check on all ${targets.length} nodes...`);
+  console.log(
+    `Phase 1: Discovery-Rich check on all ${targets.length} nodes...`,
+  );
   const initialResults = new Map<string, CheckResult>();
   const BATCH_SIZE = 20; // Reduced to 20 for high stability with multi-port checks
 
@@ -256,21 +307,27 @@ async function main() {
       initialResults.set(r.ip, r);
     });
 
-    const onlineInBatch = batchResults.filter((r) => r.status === "online").length;
+    const onlineInBatch = batchResults.filter(
+      (r) => r.status === "online",
+    ).length;
     console.log(
       `Phase 1: Block ${i + 1}-${Math.min(i + BATCH_SIZE, allTargets.length)} [${onlineInBatch} ONLINE]`,
     );
-    
+
     await new Promise((r) => setTimeout(r, 1000)); // Conservative delay
   }
 
   // 4. Phase 2: Micro-Batch Retry Scan for offline nodes
-  const offlineTargets = allTargets.filter(t => initialResults.get(t.ip)?.status === "offline");
-  
+  const offlineTargets = allTargets.filter(
+    (t) => initialResults.get(t.ip)?.status === "offline",
+  );
+
   if (offlineTargets.length > 0) {
-    console.log(`Phase 2: Micro-Batch Retry for ${offlineTargets.length} nodes (8 at a time)...`);
+    console.log(
+      `Phase 2: Micro-Batch Retry for ${offlineTargets.length} nodes (8 at a time)...`,
+    );
     const RETRY_BATCH_SIZE = 8;
-    
+
     for (let i = 0; i < offlineTargets.length; i += RETRY_BATCH_SIZE) {
       const batch = offlineTargets.slice(i, i + RETRY_BATCH_SIZE);
       const batchResults = await Promise.all(
@@ -282,17 +339,24 @@ async function main() {
           initialResults.set(result.ip, result);
         }
       });
-      
-      if ((i + RETRY_BATCH_SIZE) % 50 === 0 || i + RETRY_BATCH_SIZE >= offlineTargets.length) {
-        console.log(`Phase 2: Verified ${Math.min(i + RETRY_BATCH_SIZE, offlineTargets.length)}/${offlineTargets.length} nodes.`);
+
+      if (
+        (i + RETRY_BATCH_SIZE) % 50 === 0 ||
+        i + RETRY_BATCH_SIZE >= offlineTargets.length
+      ) {
+        console.log(
+          `Phase 2: Verified ${Math.min(i + RETRY_BATCH_SIZE, offlineTargets.length)}/${offlineTargets.length} nodes.`,
+        );
       }
 
       // Small delay between micro-batches
-      await new Promise((r) => setTimeout(r, 200)); 
+      await new Promise((r) => setTimeout(r, 200));
     }
   }
 
-  const finalResults = Array.from(initialResults.values()).map(({ working_port, ...rest }) => rest);
+  const finalResults = Array.from(initialResults.values()).map(
+    ({ working_port, ...rest }) => rest,
+  );
   const onlineCount = finalResults.filter((r) => r.status === "online").length;
   const offlineCount = finalResults.length - onlineCount;
 

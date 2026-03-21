@@ -1,5 +1,5 @@
 -- 1. Dashboard Stats (Aggregate totals)
-CREATE OR REPLACE FUNCTION get_dashboard_stats(p_state TEXT DEFAULT NULL, p_provider TEXT DEFAULT NULL)
+CREATE OR REPLACE FUNCTION get_dashboard_stats(p_state TEXT DEFAULT NULL, p_provider TEXT DEFAULT NULL, p_min_score INTEGER DEFAULT 0)
 RETURNS TABLE (
   total_nodes BIGINT,
   online_nodes BIGINT,
@@ -21,12 +21,13 @@ BEGIN
   LEFT JOIN recent_checks c ON t.ip = c.ip
   WHERE t.is_active = true
     AND (p_state IS NULL OR p_state = '' OR t.state = p_state)
-    AND (p_provider IS NULL OR p_provider = '' OR t.provider = p_provider);
+    AND (p_provider IS NULL OR p_provider = '' OR t.provider = p_provider)
+    AND (t.stability_score >= p_min_score);
 END;
 $$ LANGUAGE plpgsql SET search_path = public;
 
 -- 2. Regional Stats
-CREATE OR REPLACE FUNCTION get_regional_stats(p_state TEXT DEFAULT NULL, p_provider TEXT DEFAULT NULL)
+CREATE OR REPLACE FUNCTION get_regional_stats(p_state TEXT DEFAULT NULL, p_provider TEXT DEFAULT NULL, p_min_score INTEGER DEFAULT 0)
 RETURNS TABLE (
   state TEXT,
   city TEXT,
@@ -53,13 +54,14 @@ BEGIN
   WHERE t.is_active = true
     AND (p_state IS NULL OR p_state = '' OR t.state = p_state)
     AND (p_provider IS NULL OR p_provider = '' OR t.provider = p_provider)
+    AND (t.stability_score >= p_min_score)
   GROUP BY t.state, t.city
   ORDER BY t.state;
 END;
 $$ LANGUAGE plpgsql SET search_path = public;
 
 -- 3. Provider Stats (Node Composition)
-CREATE OR REPLACE FUNCTION get_provider_stats(p_state TEXT DEFAULT NULL, p_provider TEXT DEFAULT NULL)
+CREATE OR REPLACE FUNCTION get_provider_stats(p_state TEXT DEFAULT NULL, p_provider TEXT DEFAULT NULL, p_min_score INTEGER DEFAULT 0)
 RETURNS TABLE (
   provider TEXT,
   total_nodes BIGINT,
@@ -84,13 +86,14 @@ BEGIN
   WHERE t.is_active = true
     AND (p_state IS NULL OR p_state = '' OR t.state = p_state)
     AND (p_provider IS NULL OR p_provider = '' OR t.provider = p_provider)
+    AND (t.stability_score >= p_min_score)
   GROUP BY t.provider
   ORDER BY online_nodes DESC;
 END;
 $$ LANGUAGE plpgsql SET search_path = public;
 
 -- 4. Map Data
-CREATE OR REPLACE FUNCTION get_map_data(p_state TEXT DEFAULT NULL, p_provider TEXT DEFAULT NULL)
+CREATE OR REPLACE FUNCTION get_map_data(p_state TEXT DEFAULT NULL, p_provider TEXT DEFAULT NULL, p_min_score INTEGER DEFAULT 0)
 RETURNS TABLE (
   ip TEXT,
   lat FLOAT,
@@ -121,6 +124,7 @@ BEGIN
   WHERE t.is_active = true
     AND t.lat IS NOT NULL
     AND (p_state IS NULL OR p_state = '' OR t.state = p_state)
-    AND (p_provider IS NULL OR p_provider = '' OR t.provider = p_provider);
+    AND (p_provider IS NULL OR p_provider = '' OR t.provider = p_provider)
+    AND (t.stability_score >= p_min_score);
 END;
 $$ LANGUAGE plpgsql SET search_path = public;

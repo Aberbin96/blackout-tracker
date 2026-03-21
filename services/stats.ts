@@ -1,6 +1,8 @@
 import { supabase } from "@/utils/supabase";
 import { cacheLife } from "next/cache";
 
+const MIN_SCORE = Number(process.env.MIN_STABILITY_SCORE || 10);
+
 export async function getDashboardStats(state?: string, provider?: string) {
   "use cache";
   cacheLife("minutes");
@@ -8,6 +10,7 @@ export async function getDashboardStats(state?: string, provider?: string) {
   const { data, error } = await supabase.rpc("get_dashboard_stats", {
     p_state: state || null,
     p_provider: provider || null,
+    p_min_score: MIN_SCORE,
   });
 
   if (error || !data || data.length === 0) {
@@ -44,6 +47,7 @@ export async function getRegionalStats(state?: string, provider?: string) {
     supabase.rpc("get_regional_stats", {
       p_state: state || null,
       p_provider: provider || null,
+      p_min_score: MIN_SCORE,
     }),
     getActiveBlackouts(),
   ]);
@@ -175,6 +179,7 @@ export async function getNodeComposition(state?: string, provider?: string) {
   const { data: providers, error } = await supabase.rpc("get_provider_stats", {
     p_state: state || null,
     p_provider: provider || null,
+    p_min_score: MIN_SCORE,
   });
 
   if (error || !providers) {
@@ -237,6 +242,7 @@ export async function getMapData(state?: string, provider?: string) {
       .rpc("get_map_data", {
         p_state: state || null,
         p_provider: provider || null,
+        p_min_score: MIN_SCORE,
       })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
@@ -277,6 +283,7 @@ export async function getFiltersData() {
     .from("monitoring_targets")
     .select("state, provider")
     .eq("is_active", true)
+    .gte("stability_score", MIN_SCORE)
     .limit(50000);
 
   const states = Array.from(
@@ -296,6 +303,7 @@ export async function getHistoricalStats(state?: string, provider?: string) {
   const { data, error } = await supabase.rpc("get_historical_stats", {
     p_state: state || null,
     p_provider: provider || null,
+    p_min_score: MIN_SCORE,
   });
 
   if (error || !data) {

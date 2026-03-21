@@ -9,8 +9,9 @@ import { classifyDevice, detectNetworkType } from "../utils/classifier";
 // Load environment variables
 dotenv.config({ path: path.join(process.cwd(), ".env.local") });
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   console.error("Error: Supabase credentials not found in .env.local");
@@ -21,14 +22,18 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     autoRefreshToken: false,
-    persistSession: false
-  }
+    persistSession: false,
+  },
 });
 
 /**
  * Simple TCP port check
  */
-async function checkIpPort(ip: string, port: number, timeoutMs = 3000): Promise<boolean> {
+async function checkIpPort(
+  ip: string,
+  port: number,
+  timeoutMs = 3000,
+): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     socket.setTimeout(timeoutMs);
@@ -132,19 +137,22 @@ async function getServiceMetadata(ip: string, port: number): Promise<any> {
 async function processTarget(target: any, index: number, total: number) {
   const currentServices = target.services || [80];
   const primaryPort = currentServices[0];
-  
+
   // 1. Port Discovery & Promotion
   let workingPort = primaryPort;
   let needsPromotion = false;
 
   // Check if primary port is actually open
   const isPrimaryOpen = await checkIpPort(target.ip, primaryPort);
-  
+
   if (!isPrimaryOpen) {
     // If primary is closed, try fallback ports (Smart Learning)
-    const fallbackPorts = [443, 8291, 22, 21, 53, 3389, 7547, 8080, 8443].filter(p => p !== primaryPort);
-    
-    for (const port of fallbackPorts.slice(0, 5)) { // Try up to 5 common ports
+    const fallbackPorts = [
+      443, 8291, 22, 21, 53, 3389, 7547, 8080, 8443,
+    ].filter((p) => p !== primaryPort);
+
+    for (const port of fallbackPorts.slice(0, 5)) {
+      // Try up to 5 common ports
       const isPortOpen = await checkIpPort(target.ip, port, 2000);
       if (isPortOpen) {
         workingPort = port;
@@ -194,10 +202,14 @@ async function processTarget(target: any, index: number, total: number) {
     .eq("id", target.id);
 
   if (updateError) {
-    console.log(`[${index + 1}/${total}] Error updating ${target.ip}: ${updateError.message}`);
+    console.log(
+      `[${index + 1}/${total}] Error updating ${target.ip}: ${updateError.message}`,
+    );
   } else {
     const promotionLabel = needsPromotion ? ` (PROMOTED ${workingPort})` : "";
-    console.log(`[${index + 1}/${total}] Processed ${target.ip} (${networkType}/${deviceType})${promotionLabel}`);
+    console.log(
+      `[${index + 1}/${total}] Processed ${target.ip} (${networkType}/${deviceType})${promotionLabel}`,
+    );
   }
 }
 
@@ -211,12 +223,12 @@ async function main() {
 
   while (true) {
     console.log(`Fetching batch: ${offset} - ${offset + BATCH_SIZE}...`);
-    
+
     const { data: targets, error } = await supabase
       .from("monitoring_targets")
       .select("id, ip, services, classification_metadata, provider, asn")
       .is("is_active", true)
-      .order('id', { ascending: true })
+      .order("id", { ascending: true })
       .range(offset, offset + BATCH_SIZE - 1);
 
     if (error) {
@@ -229,7 +241,9 @@ async function main() {
       break;
     }
 
-    console.log(`Processing batch of ${targets.length} targets with concurrency ${CONCURRENCY}...`);
+    console.log(
+      `Processing batch of ${targets.length} targets with concurrency ${CONCURRENCY}...`,
+    );
 
     // Process batch with concurrency control
     const chunks = [];
@@ -238,9 +252,15 @@ async function main() {
     }
 
     for (const chunk of chunks) {
-      await Promise.all(chunk.map((target, idx) => 
-        processTarget(target, offset + totalProcessed + idx, offset + targets.length)
-      ));
+      await Promise.all(
+        chunk.map((target, idx) =>
+          processTarget(
+            target,
+            offset + totalProcessed + idx,
+            offset + targets.length,
+          ),
+        ),
+      );
       totalProcessed += chunk.length;
     }
 

@@ -1,5 +1,9 @@
 import { NextIntlClientProvider } from "next-intl";
-import { getMessages, getTranslations, setRequestLocale } from "next-intl/server";
+import {
+  getMessages,
+  getTranslations,
+  setRequestLocale,
+} from "next-intl/server";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import { Suspense } from "react";
 import "../globals.css";
@@ -41,7 +45,8 @@ export async function generateMetadata({
 }) {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "Metadata" });
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://blackout-tracker-psi.vercel.app";
+  const baseUrl =
+    process.env.APP_URL || "https://blackout-tracker-psi.vercel.app";
 
   return {
     metadataBase: new URL(baseUrl),

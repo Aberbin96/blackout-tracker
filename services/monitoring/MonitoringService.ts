@@ -3,6 +3,8 @@ import { supabase } from "@/utils/supabase";
 import { normalizeStateName } from "@/utils/normalization";
 import { AnalyzerService } from "@/services/analyzer";
 
+const MIN_SCORE = Number(process.env.MIN_STABILITY_SCORE || 10);
+
 export interface CheckResult {
   ip: string;
   provider: string;
@@ -20,17 +22,20 @@ export class MonitoringService {
     let query = supabase
       .from("connectivity_checks")
       .select("*")
-      .order('timestamp', { ascending: false })
+      .order("timestamp", { ascending: false })
       .limit(limit);
 
     if (state) {
-      query = query.eq('state', state.toLowerCase());
+      query = query.eq("state", state.toLowerCase());
     }
 
     const { data: results, error } = await query;
 
     if (error) {
-      console.error("[MonitoringService] Error fetching results for analysis:", error.message);
+      console.error(
+        "[MonitoringService] Error fetching results for analysis:",
+        error.message,
+      );
       return { success: false, error: error.message };
     }
 
@@ -87,7 +92,8 @@ export class MonitoringService {
         let query = supabase
           .from("monitoring_targets")
           .select("*")
-          .eq("is_active", true);
+          .eq("is_active", true)
+          .gte("stability_score", MIN_SCORE);
 
         if (stateFilter) {
           query = query.eq("state", stateFilter.toLowerCase());
