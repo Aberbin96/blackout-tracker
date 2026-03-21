@@ -52,10 +52,10 @@ jobs:
 
             - name: Run Monitoring Worker
               env:
-                  SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+                  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
                   SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
                   SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-                  API_CHECK_URL: ${{ vars.API_CHECK_URL }}
+                  API_CHECK_URL: ${{ secrets.API_CHECK_URL }}
                   CRON_SECRET: ${{ secrets.CRON_SECRET }}
                   MIN_STABILITY_SCORE: 0
               run: |
