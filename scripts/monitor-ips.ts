@@ -10,7 +10,15 @@ import { normalizeStateName } from "../utils/normalization";
 const execAsync = promisify(exec);
 
 // Load environment variables
-dotenv.config({ path: path.join(process.cwd(), ".env.local") });
+const envPath = path.join(process.cwd(), ".env.local");
+const envResult = dotenv.config({ path: envPath });
+
+console.log(`[ENV] Loading from: ${envPath}`);
+if (envResult.error) {
+  console.warn(`[ENV] Warning: Failed to load .env.local: ${envResult.error.message}`);
+} else {
+  console.log(`[ENV] Successfully loaded .env.local keys: ${Object.keys(envResult.parsed || {}).join(", ")}`);
+}
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey =
