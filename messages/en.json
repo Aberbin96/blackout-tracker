@@ -38,6 +38,7 @@
         "table": {
             "title": "Regional Status Overview",
             "region": "Region / Node",
+            "nodes": "Nodes",
             "availability": "Availability",
             "status": "Status",
             "sync": "Last Sync",

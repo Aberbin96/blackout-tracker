@@ -38,6 +38,7 @@
         "table": {
             "title": "Resumen de Estado Regional",
             "region": "Región / Nodo",
+            "nodes": "Nodos",
             "availability": "Disponibilidad",
             "status": "Estado",
             "sync": "Última Sincro",

@@ -108,6 +108,7 @@ export async function getRegionalStats(state?: string, provider?: string) {
 
     formattedStats.push({
       location: stateName,
+      totalNodes: stats.total,
       availability: stats.total === 0 ? "N/A" : `${Math.round(ratio * 100)}%`,
       status: stats.total === 0 ? "table.notAvailable" : status,
       lastSync: "table.updated",
@@ -154,6 +155,7 @@ export async function getRegionalStats(state?: string, provider?: string) {
 
       formattedStats.push({
         location: `${data.state} - ${data.city}`,
+        totalNodes: data.total_nodes,
         availability:
           data.total_nodes === 0 ? "N/A" : `${Math.round(ratio * 100)}%`,
         status: data.total_nodes === 0 ? "table.notAvailable" : status,

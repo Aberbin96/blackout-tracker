@@ -24,6 +24,7 @@ export function RegionalTable({ data }: Props) {
           <thead className="bg-primary/5 dark:bg-slate-800/50 text-primary dark:text-slate-400 uppercase text-[10px] font-black tracking-widest border-b border-primary/10 dark:border-white/5">
             <tr>
               <th className="px-6 py-4 font-black">{t("table.region")}</th>
+              <th className="px-6 py-4 font-black">{t("table.nodes")}</th>
               <th className="px-6 py-4 font-black">
                 {t("table.availability")}
               </th>
@@ -58,6 +59,9 @@ export function RegionalTable({ data }: Props) {
                     </span>
                   </div>
                 </td>
+                <td className="px-6 py-4 font-black tracking-tight text-slate-500">
+                  {region.totalNodes || "-"}
+                </td>
                 <td
                   className={`px-6 py-4 font-black text-base ${region.color}`}
                 >
@@ -78,7 +82,7 @@ export function RegionalTable({ data }: Props) {
             {data.length === 0 && (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={5}
                   className="px-5 py-8 text-center text-slate-400 italic"
                 >
                   {t("table.empty")}

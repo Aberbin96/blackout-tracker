@@ -13,6 +13,19 @@ jobs:
     ping-frequent:
         runs-on: ubuntu-latest
         environment: Production
+        strategy:
+            matrix:
+                chunk:
+                    - "--limit=2500 --offset=0"
+                    - "--limit=2500 --offset=2500"
+                    - "--limit=2500 --offset=5000"
+                    - "--limit=2500 --offset=7500"
+                    - "--limit=2500 --offset=10000"
+                    - "--limit=2500 --offset=12500"
+                    - "--limit=2500 --offset=15000"
+                    - "--limit=2500 --offset=17500"
+            max-parallel: 8
+            fail-fast: false
         steps:
             - name: Checkout Code
               uses: actions/checkout@v4
@@ -35,6 +48,5 @@ jobs:
                   CRON_SECRET: ${{ secrets.CRON_SECRET }}
                   MIN_STABILITY_SCORE: ${{ secrets.MIN_STABILITY_SCORE || 10 }}
               run: |
-                  echo "--- Running Fast Monitoring for Stable Nodes ---"
-                  # No chunks/matrix needed as we only check high-reliability nodes
-                  npx tsx scripts/monitor-ips.ts
+                  echo "--- Running Fast Monitoring for Stable Nodes [Chunk: ${{ matrix.chunk }}] ---"
+                  npx tsx scripts/monitor-ips.ts ${{ matrix.chunk }}
