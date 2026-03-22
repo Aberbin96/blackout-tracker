@@ -13,6 +13,21 @@ jobs:
   analyze-stability:
     runs-on: ubuntu-latest
     environment: Production
+    strategy:
+      matrix:
+        chunk:
+          - "--limit=4000 --offset=0"
+          - "--limit=4000 --offset=4000"
+          - "--limit=4000 --offset=8000"
+          - "--limit=4000 --offset=12000"
+          - "--limit=4000 --offset=16000"
+          - "--limit=4000 --offset=20000"
+          - "--limit=4000 --offset=24000"
+          - "--limit=4000 --offset=28000"
+          - "--limit=4000 --offset=32000"
+          - "--limit=4000 --offset=36000"
+      max-parallel: 10
+      fail-fast: false
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -31,4 +46,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: npx tsx scripts/analyze-stability.ts
+        run: |
+          echo "Running Analyzer Chunk: ${{ matrix.chunk }}"
+          npx tsx scripts/analyze-stability.ts ${{ matrix.chunk }}

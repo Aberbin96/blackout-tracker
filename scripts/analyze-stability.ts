@@ -58,15 +58,27 @@ async function calculateStability(target: any): Promise<number> {
 async function main() {
   console.log("--- Starting Stability Analysis (Anchor Node Identification) ---");
   
-  const BATCH_SIZE = 500;
-  let offset = 0;
+  const args = process.argv;
+  const limitArg = args.find((arg) => arg.startsWith("--limit="))?.split("=")[1];
+  const offsetArg = args.find((arg) => arg.startsWith("--offset="))?.split("=")[1];
+  
+  const limit = limitArg ? parseInt(limitArg) : Infinity;
+  const initialOffset = offsetArg ? parseInt(offsetArg) : 0;
 
-  while (true) {
+  let currentOffset = initialOffset;
+  let fetchedCount = 0;
+  const BATCH_SIZE = 1000;
+  let hasMore = true;
+
+  while (hasMore && fetchedCount < limit) {
+    const fetchSize = Math.min(BATCH_SIZE, limit - fetchedCount);
+    const toIndex = currentOffset + fetchSize - 1;
+
     const { data: targets, error } = await supabase
       .from("monitoring_targets")
       .select("id, ip, created_at, last_ip_change_at, last_online_at, hostname, classification_metadata, is_mobile, network_type, stability_score")
       .order("id", { ascending: true })
-      .range(offset, offset + BATCH_SIZE - 1);
+      .range(currentOffset, toIndex);
 
     if (error) {
       console.error("Database query error:", error.message);
@@ -74,7 +86,7 @@ async function main() {
     }
     if (!targets || targets.length === 0) break;
 
-    console.log(`Analyzing batch ${offset}...`);
+    console.log(`Analyzing batch ${currentOffset}...`);
 
     for (const target of targets) {
       const baseScore = await calculateStability(target);
@@ -110,8 +122,12 @@ async function main() {
       }
     }
 
-    if (targets.length < BATCH_SIZE) break;
-    offset += BATCH_SIZE;
+    if (targets.length > 0) {
+      fetchedCount += targets.length;
+      currentOffset += targets.length;
+    }
+
+    if (targets.length < fetchSize) break;
   }
 
   console.log("Stability analysis complete.");
