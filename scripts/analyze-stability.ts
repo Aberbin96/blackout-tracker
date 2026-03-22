@@ -87,11 +87,11 @@ async function main() {
       const referenceTime = target.last_online_at ? new Date(target.last_online_at).getTime() : new Date(target.created_at).getTime();
       const daysSinceOnline = (now - referenceTime) / (1000 * 60 * 60 * 24);
 
-      if (daysSinceOnline >= 7 && (target.stability_score || 0) > 0) {
+      if (target.last_online_at && daysSinceOnline >= 7 && (target.stability_score || 0) > 0) {
         // Purge nodes that haven't been seen online in 7 days
         updates.stability_score = 0;
-      } else if (target.stability_score === null || target.stability_score === undefined) {
-        // ONLY initialize the score for new nodes
+      } else if (target.stability_score === null || target.stability_score === undefined || target.stability_score === 0) {
+        // Initialize the score for new nodes (or nodes we just accidentally reset to 0)
         updates.stability_score = baseScore;
       }
 
