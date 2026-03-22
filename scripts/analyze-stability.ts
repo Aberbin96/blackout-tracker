@@ -64,11 +64,15 @@ async function main() {
   while (true) {
     const { data: targets, error } = await supabase
       .from("monitoring_targets")
-      .select("id, ip, created_at, last_ip_change_at, hostname, classification_metadata, is_mobile, network_type, stability_score")
+      .select("id, ip, created_at, last_ip_change_at, last_online_at, hostname, classification_metadata, is_mobile, network_type, stability_score")
       .order("id", { ascending: true })
       .range(offset, offset + BATCH_SIZE - 1);
 
-    if (error || !targets || targets.length === 0) break;
+    if (error) {
+      console.error("Database query error:", error.message);
+      break;
+    }
+    if (!targets || targets.length === 0) break;
 
     console.log(`Analyzing batch ${offset}...`);
 
@@ -79,13 +83,20 @@ async function main() {
         network_type: baseScore >= 70 ? "fixed" : target.network_type
       };
 
-      // ONLY initialize the score for new nodes so we don't overwrite dynamic scoring from monitor-ips.ts
-      if (target.stability_score === null || target.stability_score === undefined) {
+      const now = Date.now();
+      const referenceTime = target.last_online_at ? new Date(target.last_online_at).getTime() : new Date(target.created_at).getTime();
+      const daysSinceOnline = (now - referenceTime) / (1000 * 60 * 60 * 24);
+
+      if (daysSinceOnline >= 7 && (target.stability_score || 0) > 0) {
+        // Purge nodes that haven't been seen online in 7 days
+        updates.stability_score = 0;
+      } else if (target.stability_score === null || target.stability_score === undefined) {
+        // ONLY initialize the score for new nodes
         updates.stability_score = baseScore;
       }
 
       // Skip update if nothing meaningful changed, to save DB writes
-      if (updates.network_type === target.network_type && !updates.stability_score) {
+      if (updates.network_type === target.network_type && updates.stability_score === undefined) {
         continue;
       }
 

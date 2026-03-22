@@ -9,10 +9,10 @@ BEGIN
     last_online_at = NOW()
   WHERE ip = ANY(online_ips);
 
-  -- Punish offline nodes: -5 points per failed ping, floored at 0
+  -- Punish offline nodes: -1 points per failed ping, floored at 0 (allows survival during blackouts)
   UPDATE monitoring_targets
   SET 
-    stability_score = GREATEST(0, COALESCE(stability_score, 0) - 5)
+    stability_score = GREATEST(0, COALESCE(stability_score, 0) - 1)
   WHERE ip = ANY(offline_ips);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;

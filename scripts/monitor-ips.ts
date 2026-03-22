@@ -89,34 +89,45 @@ async function fastCheck(
   const commonPorts = [80, 443, 8291, 7547, 8080, 22, 53, 3389, 8443, 5060];
   const portsToTry = Array.from(new Set([primaryPort, ...commonPorts]));
 
-  // Run ICMP (Ping) and Top Ports in parallel
-  const results = await Promise.all([
-    pingIp(target.ip, 8000),
-    ...portsToTry.map((port) => performCheck(target.ip, port, timeoutMs)),
-  ]);
+  // We wrap each check to reject if it fails, so Promise.any only resolves on the first success!
+  const promises = [
+    pingIp(target.ip, timeoutMs).then((res) =>
+      res ? { success: true, type: "ICMP", port: undefined, latency: Date.now() - startTime } : Promise.reject("Ping failed")
+    ),
+    ...portsToTry.map((port) =>
+      performCheck(target.ip, port, timeoutMs).then((res) =>
+        res.success ? { success: true, type: "TCP", port, code: res.code, latency: Date.now() - startTime } : Promise.reject(`Port ${port} failed`)
+      )
+    ),
+  ];
 
-  const icmpRes = results[0] as boolean;
-  const tcpResults = results.slice(1) as { success: boolean; code?: string }[];
-  const successIndex = tcpResults.findIndex((r) => r.success);
-
-  const isOnline = icmpRes || successIndex !== -1;
-
-  return {
-    ip: target.ip,
-    provider: target.provider,
-    state: normalizeStateName(target.state).toLowerCase(),
-    status: isOnline ? "online" : "offline",
-    latency: Date.now() - startTime,
-    working_port: successIndex !== -1 ? portsToTry[successIndex] : undefined,
-    error_type:
-      successIndex !== -1
-        ? "DISCOVERY_OPEN"
-        : icmpRes
-          ? "ICMP_ONLY"
-          : tcpResults[0]?.code,
-    timeout_ms: timeoutMs,
-    timestamp,
-  };
+  try {
+    // Return IMMEDIATELY when the first check succeeds
+    const fastest = await Promise.any(promises);
+    return {
+      ip: target.ip,
+      provider: target.provider,
+      state: normalizeStateName(target.state).toLowerCase(),
+      status: "online",
+      latency: fastest.latency,
+      working_port: fastest.type === "TCP" ? fastest.port : undefined,
+      error_type: fastest.type === "TCP" ? "DISCOVERY_OPEN" : "ICMP_ONLY",
+      timeout_ms: timeoutMs,
+      timestamp,
+    };
+  } catch (e: any) {
+    // If we land here, EVERYTHING failed (node is offline)
+    return {
+      ip: target.ip,
+      provider: target.provider,
+      state: normalizeStateName(target.state).toLowerCase(),
+      status: "offline",
+      latency: Date.now() - startTime,
+      error_type: "TIMEOUT",
+      timeout_ms: timeoutMs,
+      timestamp,
+    };
+  }
 }
 
 async function retryCheck(
@@ -320,21 +331,21 @@ async function main() {
     `--- Final Summary: ${onlineCount} Online, ${offlineCount} Offline ---`,
   );
 
-  // 4b. Dynamic Score Penalty/Reward System
-  if (finalResults.length > 0) {
-    console.log(`Updating dynamic stability scores for ${finalResults.length} targets...`);
-    const onlineIps = finalResults.filter((r) => r.status === "online").map((r) => r.ip);
-    const offlineIps = finalResults.filter((r) => r.status === "offline").map((r) => r.ip);
+  // 4b. Update last_online_at for online nodes
+  const onlineIps = finalResults.filter((r) => r.status === "online").map((r) => r.ip);
+  if (onlineIps.length > 0) {
+    console.log(`Updating last_online_at for ${onlineIps.length} online nodes...`);
+    const UPDATE_BATCH_SIZE = 500;
+    for (let i = 0; i < onlineIps.length; i += UPDATE_BATCH_SIZE) {
+      const batchIfs = onlineIps.slice(i, i + UPDATE_BATCH_SIZE);
+      const { error: updateError } = await supabase
+        .from("monitoring_targets")
+        .update({ last_online_at: timestamp })
+        .in("ip", batchIfs);
 
-    const { error: scoreError } = await supabase.rpc("update_node_scores", {
-      online_ips: onlineIps,
-      offline_ips: offlineIps,
-    });
-
-    if (scoreError) {
-      console.error("Error updating stability scores:", scoreError.message);
-    } else {
-      console.log(`Stability scores updated successfully.`);
+      if (updateError) {
+        console.error(`Error updating last_online_at batch ${i / UPDATE_BATCH_SIZE + 1}:`, updateError.message);
+      }
     }
   }
 
