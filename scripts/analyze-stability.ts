@@ -25,12 +25,12 @@ const supabase = createClient(supabaseUrl, supabaseKey);
  */
 
 async function calculateStability(target: any): Promise<number> {
-  let score = 20; // Base score
+  let score = 0; // Base score lowered to 0
 
   // 1. Longevity (max 40 points)
   const referenceDate = new Date(target.last_ip_change_at || target.created_at);
   const daysOld = Math.floor((Date.now() - referenceDate.getTime()) / (1000 * 60 * 60 * 24));
-  score += Math.min(Math.max(0, daysOld), 40);
+  score += Math.min(Math.max(0, daysOld * 2), 40); // 2 points per day, requires 5 days to reach 10 just by age
 
   // 2. Mobile Check
   if (target.is_mobile || target.network_type === "mobile") {
@@ -47,7 +47,7 @@ async function calculateStability(target: any): Promise<number> {
     if (isLikelyDynamic) {
         score -= 20;
     } else {
-        score += 20; // Likely business or static assignment
+        score += 10; // Likely business or static assignment (+10)
     }
   }
 

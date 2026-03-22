@@ -84,14 +84,14 @@ async function fastCheck(
   timestamp: string,
 ): Promise<CheckResult> {
   const startTime = Date.now();
-  const timeoutMs = 5000;
+  const timeoutMs = 8000;
   const primaryPort = target.services?.[0] || 80;
   const commonPorts = [80, 443, 8291, 7547, 8080, 22, 53, 3389, 8443, 5060];
   const portsToTry = Array.from(new Set([primaryPort, ...commonPorts]));
 
   // Run ICMP (Ping) and Top Ports in parallel
   const results = await Promise.all([
-    pingIp(target.ip, 3000),
+    pingIp(target.ip, 8000),
     ...portsToTry.map((port) => performCheck(target.ip, port, timeoutMs)),
   ]);
 
@@ -303,7 +303,7 @@ async function main() {
     `Phase 1: Discovery-Rich check on all ${targets.length} nodes...`,
   );
   const initialResults = new Map<string, CheckResult>();
-  const BATCH_SIZE = 20; // Reduced to 20 for high stability with multi-port checks
+  const BATCH_SIZE = 50; // Increased to 50 for faster throughput
 
   for (let i = 0; i < allTargets.length; i += BATCH_SIZE) {
     const batch = allTargets.slice(i, i + BATCH_SIZE);
@@ -325,42 +325,8 @@ async function main() {
     await new Promise((r) => setTimeout(r, 1000)); // Conservative delay
   }
 
-  // 4. Phase 2: Micro-Batch Retry Scan for offline nodes
-  const offlineTargets = allTargets.filter(
-    (t) => initialResults.get(t.ip)?.status === "offline",
-  );
-
-  if (offlineTargets.length > 0) {
-    console.log(
-      `Phase 2: Micro-Batch Retry for ${offlineTargets.length} nodes (8 at a time)...`,
-    );
-    const RETRY_BATCH_SIZE = 8;
-
-    for (let i = 0; i < offlineTargets.length; i += RETRY_BATCH_SIZE) {
-      const batch = offlineTargets.slice(i, i + RETRY_BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map((target) => retryCheck(target, timestamp)),
-      );
-
-      batchResults.forEach((result) => {
-        if (result.status === "online") {
-          initialResults.set(result.ip, result);
-        }
-      });
-
-      if (
-        (i + RETRY_BATCH_SIZE) % 50 === 0 ||
-        i + RETRY_BATCH_SIZE >= offlineTargets.length
-      ) {
-        console.log(
-          `Phase 2: Verified ${Math.min(i + RETRY_BATCH_SIZE, offlineTargets.length)}/${offlineTargets.length} nodes.`,
-        );
-      }
-
-      // Small delay between micro-batches
-      await new Promise((r) => setTimeout(r, 200));
-    }
-  }
+  // 4. Phase 2 (Removed)
+  // Micro-Batch Retry Scan has been removed. Phase 1 now waits 8s.
 
   const finalResults = Array.from(initialResults.values()).map(
     ({ working_port, ...rest }) => rest,

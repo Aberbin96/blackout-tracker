@@ -16,15 +16,32 @@ jobs:
         strategy:
             matrix:
                 chunk:
-                    - "--limit=2500 --offset=0"
-                    - "--limit=2500 --offset=2500"
-                    - "--limit=2500 --offset=5000"
-                    - "--limit=2500 --offset=7500"
-                    - "--limit=2500 --offset=10000"
-                    - "--limit=2500 --offset=12500"
-                    - "--limit=2500 --offset=15000"
-                    - "--limit=2500 --offset=17500"
-            max-parallel: 8
+                    - "--limit=1000 --offset=0"
+                    - "--limit=1000 --offset=1000"
+                    - "--limit=1000 --offset=2000"
+                    - "--limit=1000 --offset=3000"
+                    - "--limit=1000 --offset=4000"
+                    - "--limit=1000 --offset=5000"
+                    - "--limit=1000 --offset=6000"
+                    - "--limit=1000 --offset=7000"
+                    - "--limit=1000 --offset=8000"
+                    - "--limit=1000 --offset=9000"
+                    - "--limit=1000 --offset=10000"
+                    - "--limit=1000 --offset=11000"
+                    - "--limit=1000 --offset=12000"
+                    - "--limit=1000 --offset=13000"
+                    - "--limit=1000 --offset=14000"
+                    - "--limit=1000 --offset=15000"
+                    - "--limit=1000 --offset=16000"
+                    - "--limit=1000 --offset=17000"
+                    - "--limit=1000 --offset=18000"
+                    - "--limit=1000 --offset=19000"
+                    - "--limit=1000 --offset=20000"
+                    - "--limit=1000 --offset=21000"
+                    - "--limit=1000 --offset=22000"
+                    - "--limit=1000 --offset=23000"
+                    - "--limit=1000 --offset=24000"
+            max-parallel: 25
             fail-fast: false
         steps:
             - name: Checkout Code
