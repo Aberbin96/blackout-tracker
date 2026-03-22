@@ -102,8 +102,11 @@ async function main() {
       if (target.last_online_at && daysSinceOnline >= 7 && (target.stability_score || 0) > 0) {
         // Purge nodes that haven't been seen online in 7 days
         updates.stability_score = 0;
-      } else if (target.stability_score === null || target.stability_score === undefined || target.stability_score === 0) {
-        // Initialize the score for new nodes (or nodes we just accidentally reset to 0)
+      } else if (!target.last_online_at && ((now - new Date(target.created_at).getTime()) / (1000 * 60 * 60 * 24)) >= 7 && (target.stability_score || 0) > 0) {
+        // Purge nodes created > 7 days ago that have NEVER been seen online
+        updates.stability_score = 0;
+      } else if (target.stability_score === null || target.stability_score === undefined) {
+        // ONLY initialize the score for virgin new nodes
         updates.stability_score = baseScore;
       }
 
