@@ -320,6 +320,24 @@ async function main() {
     `--- Final Summary: ${onlineCount} Online, ${offlineCount} Offline ---`,
   );
 
+  // 4b. Dynamic Score Penalty/Reward System
+  if (finalResults.length > 0) {
+    console.log(`Updating dynamic stability scores for ${finalResults.length} targets...`);
+    const onlineIps = finalResults.filter((r) => r.status === "online").map((r) => r.ip);
+    const offlineIps = finalResults.filter((r) => r.status === "offline").map((r) => r.ip);
+
+    const { error: scoreError } = await supabase.rpc("update_node_scores", {
+      online_ips: onlineIps,
+      offline_ips: offlineIps,
+    });
+
+    if (scoreError) {
+      console.error("Error updating stability scores:", scoreError.message);
+    } else {
+      console.log(`Stability scores updated successfully.`);
+    }
+  }
+
   // 5. Store Results Directly in Supabase
   console.log(`Storing ${finalResults.length} results directly in Supabase...`);
   const SUPABASE_INSERT_BATCH_SIZE = 500;

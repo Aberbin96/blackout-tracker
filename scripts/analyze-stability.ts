@@ -64,7 +64,7 @@ async function main() {
   while (true) {
     const { data: targets, error } = await supabase
       .from("monitoring_targets")
-      .select("id, ip, created_at, last_ip_change_at, hostname, classification_metadata, is_mobile, network_type")
+      .select("id, ip, created_at, last_ip_change_at, hostname, classification_metadata, is_mobile, network_type, stability_score")
       .order("id", { ascending: true })
       .range(offset, offset + BATCH_SIZE - 1);
 
@@ -73,14 +73,25 @@ async function main() {
     console.log(`Analyzing batch ${offset}...`);
 
     for (const target of targets) {
-      const score = await calculateStability(target);
+      const baseScore = await calculateStability(target);
       
+      const updates: any = {
+        network_type: baseScore >= 70 ? "fixed" : target.network_type
+      };
+
+      // ONLY initialize the score for new nodes so we don't overwrite dynamic scoring from monitor-ips.ts
+      if (target.stability_score === null || target.stability_score === undefined) {
+        updates.stability_score = baseScore;
+      }
+
+      // Skip update if nothing meaningful changed, to save DB writes
+      if (updates.network_type === target.network_type && !updates.stability_score) {
+        continue;
+      }
+
       const { error: updateError } = await supabase
         .from("monitoring_targets")
-        .update({ 
-            stability_score: score,
-            network_type: score >= 70 ? "fixed" : target.network_type
-        })
+        .update(updates)
         .eq("id", target.id);
 
       if (updateError) {
