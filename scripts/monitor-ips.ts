@@ -229,17 +229,24 @@ async function main() {
   // 1. Fetch Targets (with pagination to bypass 1000 default limit)
   console.log("Fetching monitoring targets...");
   const allTargets: Target[] = [];
-  let page = 0;
+  const limit = limitFilter ? parseInt(limitFilter) : Infinity;
+  const initialOffset = offsetFilter ? parseInt(offsetFilter) : 0;
+  
+  let currentOffset = initialOffset;
+  let fetchedCount = 0;
   const PAGE_SIZE = 1000;
   let hasMore = true;
 
-  while (hasMore) {
+  while (hasMore && fetchedCount < limit) {
+    const fetchSize = Math.min(PAGE_SIZE, limit - fetchedCount);
+    const toIndex = currentOffset + fetchSize - 1;
+
     let query = supabase
       .from("monitoring_targets")
       .select("id, ip, provider, state, services, stability_score")
       .eq("is_active", true)
       .gte("stability_score", minScore)
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+      .range(currentOffset, toIndex);
 
     if (stateFilter) {
       query = query.ilike("state", stateFilter);
@@ -247,32 +254,6 @@ async function main() {
 
     if (providerFilter) {
       query = query.ilike("provider", providerFilter);
-    }
-
-    if (offsetFilter) {
-      const baseOffset = parseInt(offsetFilter);
-      query = query.range(
-        baseOffset + page * PAGE_SIZE,
-        baseOffset + (page + 1) * PAGE_SIZE - 1,
-      );
-    } else {
-      query = query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-    }
-
-    if (limitFilter) {
-      const limit = parseInt(limitFilter);
-      const currentOffset =
-        (offsetFilter ? parseInt(offsetFilter) : 0) + page * PAGE_SIZE;
-      if (
-        currentOffset + PAGE_SIZE >
-        (offsetFilter ? parseInt(offsetFilter) : 0) + limit
-      ) {
-        query = query.range(
-          currentOffset,
-          (offsetFilter ? parseInt(offsetFilter) : 0) + limit - 1,
-        );
-        hasMore = false; // Stop after this query
-      }
     }
 
     const { data, error } = await query;
@@ -284,10 +265,11 @@ async function main() {
 
     if (data && data.length > 0) {
       allTargets.push(...(data as Target[]));
-      if (data.length < PAGE_SIZE) {
+      fetchedCount += data.length;
+      currentOffset += data.length;
+
+      if (data.length < fetchSize) {
         hasMore = false;
-      } else {
-        page++;
       }
     } else {
       hasMore = false;
