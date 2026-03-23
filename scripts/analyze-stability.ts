@@ -96,22 +96,27 @@ async function main() {
       };
 
       const now = Date.now();
-      const referenceTime = target.last_online_at ? new Date(target.last_online_at).getTime() : new Date(target.created_at).getTime();
-      const daysSinceOnline = (now - referenceTime) / (1000 * 60 * 60 * 24);
+      const lastOnlineTime = target.last_online_at ? new Date(target.last_online_at).getTime() : 0;
+      const hoursSinceOnline = lastOnlineTime > 0 ? (now - lastOnlineTime) / (1000 * 60 * 60) : Infinity;
 
-      if (target.last_online_at && daysSinceOnline >= 7 && (target.stability_score || 0) > 0) {
-        // Purge nodes that haven't been seen online in 7 days
-        updates.stability_score = 0;
-      } else if (!target.last_online_at && ((now - new Date(target.created_at).getTime()) / (1000 * 60 * 60 * 24)) >= 7 && (target.stability_score || 0) > 0) {
-        // Purge nodes created > 7 days ago that have NEVER been seen online
-        updates.stability_score = 0;
-      } else if (target.stability_score === null || target.stability_score === undefined) {
-        // ONLY initialize the score for virgin new nodes
-        updates.stability_score = baseScore;
+      let newScore = target.stability_score || 0;
+
+      if (target.stability_score === null || target.stability_score === undefined) {
+        // ONLY initialize the score for new nodes
+        newScore = baseScore;
+      } else {
+        // Daily evaluation: +1 if active in the last 24h, -1 if not
+        if (hoursSinceOnline <= 24) {
+          newScore = Math.min(100, newScore + 1);
+        } else {
+          newScore = Math.max(0, newScore - 1);
+        }
       }
 
+      updates.stability_score = newScore;
+
       // Skip update if nothing meaningful changed, to save DB writes
-      if (updates.network_type === target.network_type && updates.stability_score === undefined) {
+      if (updates.network_type === target.network_type && newScore === target.stability_score) {
         continue;
       }
 
