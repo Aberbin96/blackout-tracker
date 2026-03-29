@@ -253,7 +253,7 @@ async function main() {
     const fetchSize = Math.min(PAGE_SIZE, limit - fetchedCount);
     const toIndex = currentOffset + fetchSize - 1;
 
-    const { data, error } = await withRetry(() => {
+    const { data, error } = await withRetry(async () => {
       let query = supabase
         .from("monitoring_targets")
         .select("id, ip, provider, state, services, stability_score")
@@ -268,7 +268,7 @@ async function main() {
       if (providerFilter) {
         query = query.ilike("provider", providerFilter);
       }
-      return query;
+      return await query;
     }, { operationName: `Fetching targets (Offset: ${currentOffset})` });
 
     if (error) {
@@ -340,8 +340,8 @@ async function main() {
     const UPDATE_BATCH_SIZE = 500;
     for (let i = 0; i < onlineIps.length; i += UPDATE_BATCH_SIZE) {
       const batchIfs = onlineIps.slice(i, i + UPDATE_BATCH_SIZE);
-      const { error: updateError } = await withRetry(() => 
-        supabase
+      const { error: updateError } = await withRetry(async () => 
+        await supabase
           .from("monitoring_targets")
           .update({ last_online_at: timestamp })
           .in("ip", batchIfs),
@@ -359,8 +359,8 @@ async function main() {
   const SUPABASE_INSERT_BATCH_SIZE = 500;
   for (let i = 0; i < finalResults.length; i += SUPABASE_INSERT_BATCH_SIZE) {
     const batch = finalResults.slice(i, i + SUPABASE_INSERT_BATCH_SIZE);
-    const { error: insertError } = await withRetry(() => 
-      supabase
+    const { error: insertError } = await withRetry(async () => 
+      await supabase
         .from("connectivity_checks")
         .insert(batch),
       { operationName: `Storing batch ${i / SUPABASE_INSERT_BATCH_SIZE + 1}` }
