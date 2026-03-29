@@ -6,6 +6,7 @@ import * as dotenv from "dotenv";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { normalizeStateName } from "../utils/normalization";
+import { withRetry } from "../utils/supabase-retry";
 
 const execAsync = promisify(exec);
 
@@ -252,22 +253,23 @@ async function main() {
     const fetchSize = Math.min(PAGE_SIZE, limit - fetchedCount);
     const toIndex = currentOffset + fetchSize - 1;
 
-    let query = supabase
-      .from("monitoring_targets")
-      .select("id, ip, provider, state, services, stability_score")
-      .eq("is_active", true)
-      .gte("stability_score", minScore)
-      .range(currentOffset, toIndex);
+    const { data, error } = await withRetry(() => {
+      let query = supabase
+        .from("monitoring_targets")
+        .select("id, ip, provider, state, services, stability_score")
+        .eq("is_active", true)
+        .gte("stability_score", minScore)
+        .range(currentOffset, toIndex);
 
-    if (stateFilter) {
-      query = query.ilike("state", stateFilter);
-    }
+      if (stateFilter) {
+        query = query.ilike("state", stateFilter);
+      }
 
-    if (providerFilter) {
-      query = query.ilike("provider", providerFilter);
-    }
-
-    const { data, error } = await query;
+      if (providerFilter) {
+        query = query.ilike("provider", providerFilter);
+      }
+      return query;
+    }, { operationName: `Fetching targets (Offset: ${currentOffset})` });
 
     if (error) {
       console.error("Error fetching targets:", error);
@@ -338,10 +340,13 @@ async function main() {
     const UPDATE_BATCH_SIZE = 500;
     for (let i = 0; i < onlineIps.length; i += UPDATE_BATCH_SIZE) {
       const batchIfs = onlineIps.slice(i, i + UPDATE_BATCH_SIZE);
-      const { error: updateError } = await supabase
-        .from("monitoring_targets")
-        .update({ last_online_at: timestamp })
-        .in("ip", batchIfs);
+      const { error: updateError } = await withRetry(() => 
+        supabase
+          .from("monitoring_targets")
+          .update({ last_online_at: timestamp })
+          .in("ip", batchIfs),
+        { operationName: `Updating last_online_at batch ${i / UPDATE_BATCH_SIZE + 1}` }
+      );
 
       if (updateError) {
         console.error(`Error updating last_online_at batch ${i / UPDATE_BATCH_SIZE + 1}:`, updateError.message);
@@ -354,9 +359,12 @@ async function main() {
   const SUPABASE_INSERT_BATCH_SIZE = 500;
   for (let i = 0; i < finalResults.length; i += SUPABASE_INSERT_BATCH_SIZE) {
     const batch = finalResults.slice(i, i + SUPABASE_INSERT_BATCH_SIZE);
-    const { error: insertError } = await supabase
-      .from("connectivity_checks")
-      .insert(batch);
+    const { error: insertError } = await withRetry(() => 
+      supabase
+        .from("connectivity_checks")
+        .insert(batch),
+      { operationName: `Storing batch ${i / SUPABASE_INSERT_BATCH_SIZE + 1}` }
+    );
 
     if (insertError) {
       console.error(
