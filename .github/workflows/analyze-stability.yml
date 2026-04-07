@@ -41,12 +41,11 @@ jobs:
       - name: Install Dependencies
         run: npm install --include=dev
 
-      - name: Run Stability Analysis (Node 24)
-        uses: ./.github/actions/blackout-action
+      - name: Run Stability Analysis
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        with:
-          script: 'analyze-stability'
-          args: '${{ matrix.chunk }}'
+        run: |
+          echo "Running Analyzer Chunk: ${{ matrix.chunk }}"
+          npx tsx scripts/analyze-stability.ts ${{ matrix.chunk }}
