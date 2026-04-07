@@ -53,7 +53,8 @@ jobs:
             - name: Install Dependencies
               run: npm install --include=dev
 
-            - name: Run Frequent Monitoring
+            - name: Run Frequent Monitoring (Node 24)
+              uses: ./.github/actions/blackout-action
               env:
                   SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
                   SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -61,6 +62,6 @@ jobs:
                   API_CHECK_URL: ${{ secrets.API_CHECK_URL }}
                   CRON_SECRET: ${{ secrets.CRON_SECRET }}
                   MIN_STABILITY_SCORE: ${{ secrets.MIN_STABILITY_SCORE || 10 }}
-              run: |
-                  echo "--- Running Fast Monitoring for Stable Nodes [Chunk: ${{ matrix.chunk }}] ---"
-                  npx tsx scripts/monitor-ips.ts ${{ matrix.chunk }}
+              with:
+                  script: 'monitor-ips'
+                  args: '${{ matrix.chunk }}'

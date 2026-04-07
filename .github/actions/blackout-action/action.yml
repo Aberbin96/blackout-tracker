@@ -1,0 +1,17 @@
+name: 'Blackout Tracker Action'
+description: 'Runs project-specific maintenance and analysis scripts using Node 24'
+inputs:
+  script:
+    description: 'The script to run (e.g. analyze-stability)'
+    required: true
+  args:
+    description: 'Arguments to pass to the script'
+    required: false
+    default: ''
+  jitter:
+    description: 'Add random jitter (0-120s) to stagger API requests'
+    required: false
+    default: 'false'
+runs:
+  using: 'node24'
+  main: 'main.js'
