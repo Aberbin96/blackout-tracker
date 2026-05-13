@@ -1,16 +1,22 @@
 import "./load-env";
 import axios from "axios";
 import net from "net";
-import path from "path";
 import { normalizeStateName } from "../utils/normalization";
-import { supabase } from "../utils/supabase";
 import { VENEZUELA_ISPS } from "../constants/providers";
 import { detectNetworkType } from "../utils/classifier";
+import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
+import { ipGeolocationCache, monitoringTargets, scannedPrefixes } from "../db/schema";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
-/**
- * Omni-Discovery Tool (Country-Wide Mapping) with Supabase Persistence
- * Updates: Enriched metadata (Lat/Lon/Hostname) + VE filtering + Aggressive Mode
- */
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error("Error: DATABASE_URL is missing");
+  process.exit(1);
+}
+
+const pool = mysql.createPool(DATABASE_URL);
+const db = drizzle(pool, { mode: "default" });
 
 const COMMON_PORTS = [
   21, 22, 23, 53, 80, 161, 443, 554, 1900, 2000, 3389, 3478, 37777, 5000, 5060,
@@ -34,14 +40,8 @@ async function isAlive(ip: string, port: number): Promise<number | null> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     socket.setTimeout(3000);
-    socket.connect(port, ip, () => {
-      socket.destroy();
-      resolve(port);
-    });
-    const fail = () => {
-      socket.destroy();
-      resolve(null);
-    };
+    socket.connect(port, ip, () => { socket.destroy(); resolve(port); });
+    const fail = () => { socket.destroy(); resolve(null); };
     socket.on("error", fail);
     socket.on("timeout", fail);
   });
@@ -55,164 +55,132 @@ async function checkAnyPort(ip: string): Promise<number | null> {
 async function getGeoBatch(ips: string[]): Promise<any[]> {
   if (ips.length === 0) return [];
 
-  // 1. Check Cache first
-  const { data: cachedData } = await supabase
-    .from("ip_geolocation_cache")
-    .select("ip, data")
-    .in("ip", ips);
+  const cachedData = await db
+    .select({ ip: ipGeolocationCache.ip, data: ipGeolocationCache.data })
+    .from(ipGeolocationCache)
+    .where(inArray(ipGeolocationCache.ip, ips));
 
-  const cachedIps = new Set(cachedData?.map((d) => d.ip) || []);
+  const cachedIps = new Set(cachedData.map((d) => d.ip));
   const uncachedIps = ips.filter((ip) => !cachedIps.has(ip));
-
   const apiResults: any[] = [];
 
-  // 2. Query external API for missing ones in chunks of 100 (API Limit)
   if (uncachedIps.length > 0) {
     const BATCH_LIMIT = 100;
-
     for (let i = 0; i < uncachedIps.length; i += BATCH_LIMIT) {
       const chunk = uncachedIps.slice(i, i + BATCH_LIMIT);
       let retries = 3;
-
       while (retries > 0) {
         try {
           const queries = chunk.map((ip) => ({
             query: ip,
-            fields:
-              "status,message,countryCode,regionName,city,zip,lat,lon,timezone,reverse,mobile,proxy,query",
+            fields: "status,message,countryCode,regionName,city,zip,lat,lon,timezone,reverse,mobile,proxy,query",
           }));
-
-          const resp = await axios.post("http://ip-api.com/batch", queries, {
-            timeout: 15000,
-          });
-
+          const resp = await axios.post("http://ip-api.com/batch", queries, { timeout: 15000 });
           const chunkResults = resp.data;
           apiResults.push(...chunkResults);
 
-          // 3. Save new results to cache
           const cacheEntries = chunkResults
             .filter((r: any) => r.status === "success")
-            .map((r: any) => ({
-              ip: r.query,
-              data: r,
-              updated_at: new Date().toISOString(),
-            }));
+            .map((r: any) => ({ ip: r.query, data: r, updatedAt: new Date() }));
 
           if (cacheEntries.length > 0) {
-            await supabase.from("ip_geolocation_cache").upsert(cacheEntries);
+            for (const entry of cacheEntries) {
+              await db
+                .insert(ipGeolocationCache)
+                .values(entry)
+                .onDuplicateKeyUpdate({ set: { data: entry.data, updatedAt: new Date() } });
+            }
           }
-          break; // Success for this chunk!
+          break;
         } catch (error: any) {
           retries--;
           if (retries === 0) {
-            console.error(
-              `  Error calling ip-api batch (final attempt):`,
-              error.message,
-            );
+            console.error(`  Error calling ip-api batch (final attempt):`, error.message);
           } else {
             const isRateLimit = error.response?.status === 429;
-            const waitTime = isRateLimit ? 10000 : 5000; // wait longer on rate limits
-            console.warn(
-              `  ip-api ${isRateLimit ? "RATE LIMIT" : "timeout"}, waiting ${waitTime / 1000}s and retrying chunk... (${retries} left)`,
-            );
+            const waitTime = isRateLimit ? 10000 : 5000;
+            console.warn(`  ip-api ${isRateLimit ? "RATE LIMIT" : "timeout"}, waiting ${waitTime / 1000}s... (${retries} left)`);
             await new Promise((r) => setTimeout(r, waitTime));
           }
         }
       }
-
-      // Delay between chunks to respect rate limits (15 requests per minute = 1 every 4s)
       if (i + BATCH_LIMIT < uncachedIps.length) {
         await new Promise((r) => setTimeout(r, 4500));
       }
     }
   }
 
-  // 4. Combine results
-  const combined = [...(cachedData?.map((d) => d.data) || []), ...apiResults];
-
-  return combined;
+  return [...cachedData.map((d) => d.data), ...apiResults];
 }
 
 async function isPrefixScanned(prefix: string): Promise<boolean> {
-  const { data } = await supabase
-    .from("scanned_prefixes")
-    .select("prefix")
-    .eq("prefix", prefix)
-    .single();
-
-  return !!data;
+  const rows = await db
+    .select({ prefix: scannedPrefixes.prefix })
+    .from(scannedPrefixes)
+    .where(eq(scannedPrefixes.prefix, prefix))
+    .limit(1);
+  return rows.length > 0;
 }
 
-async function markPrefixAsScanned(
-  prefix: string,
-  provider: string,
-  asn: number,
-) {
-  await supabase.from("scanned_prefixes").insert([{ prefix, provider, asn }]);
+async function markPrefixAsScanned(prefix: string, provider: string, asn: number) {
+  await db
+    .insert(scannedPrefixes)
+    .values({ prefix, provider, asn })
+    .onDuplicateKeyUpdate({ set: { scannedAt: new Date() } });
 }
 
-// ... (existing code)
-
-async function saveIpToDb(
-  geoResult: any,
-  alivePort: number,
-  providerName: string,
-  asn: number,
-) {
-  // STRICT FILTER: Only Venezuela
-  if (geoResult.countryCode !== "VE") {
-    return false;
-  }
+async function saveIpToDb(geoResult: any, alivePort: number, providerName: string, asn: number) {
+  if (geoResult.countryCode !== "VE") return false;
 
   const state = normalizeStateName(geoResult.regionName || "desconocido");
   const networkType = detectNetworkType(providerName, asn, geoResult.mobile);
 
-  const { error } = await supabase.from("monitoring_targets").upsert(
-    {
-      ip: geoResult.query,
-      provider: providerName,
-      asn,
-      state,
-      city: geoResult.city,
-      zip: geoResult.zip,
-      lat: geoResult.lat,
-      lon: geoResult.lon,
-      timezone: geoResult.timezone,
-      hostname: geoResult.reverse,
-      is_mobile: networkType === "mobile",
-      network_type: networkType,
-      is_proxy: geoResult.proxy || false,
-      services: [alivePort],
-      is_active: true,
-    },
-    { onConflict: "ip" },
-  );
-
-  if (error) {
-    console.error(
-      `\n  [DB ERROR] Failed to save IP ${geoResult.query}:`,
-      error.message,
-    );
+  try {
+    await db
+      .insert(monitoringTargets)
+      .values({
+        ip: geoResult.query,
+        provider: providerName,
+        asn,
+        state,
+        city: geoResult.city,
+        zip: geoResult.zip,
+        lat: geoResult.lat,
+        lon: geoResult.lon,
+        timezone: geoResult.timezone,
+        hostname: geoResult.reverse,
+        isMobile: networkType === "mobile",
+        networkType,
+        isProxy: geoResult.proxy || false,
+        services: [alivePort],
+        isActive: true,
+      })
+      .onDuplicateKeyUpdate({
+        set: {
+          provider: providerName,
+          state,
+          city: geoResult.city,
+          lat: geoResult.lat,
+          lon: geoResult.lon,
+          services: [alivePort],
+          isActive: true,
+        },
+      });
+    return true;
+  } catch (error: any) {
+    console.error(`\n  [DB ERROR] Failed to save IP ${geoResult.query}:`, error.message);
+    return false;
   }
-
-  return !error;
 }
 
-/**
- * Generate candidate IPs for a prefix.
- */
 function getCandidates(prefix: string, aggressive: boolean = false): string[] {
   const [network, maskStr] = prefix.split("/");
   const mask = parseInt(maskStr);
   const parts = network.split(".").map(Number);
-
   const candidates: string[] = [];
-
-  // SMART SAMPLING: Priority targets (Gateways, common offsets)
   const priorityOffsets = [1, 2, 5, 10, 25, 50, 69, 100, 150, 200, 254];
 
   if (aggressive) {
-    // TRUE FULL SCAN: Generate 100% of IPs for the prefix
     const totalIps = Math.pow(2, 32 - mask);
     for (let i = 0; i < totalIps; i++) {
       const b2 = Math.floor(i / 65536);
@@ -221,39 +189,28 @@ function getCandidates(prefix: string, aggressive: boolean = false): string[] {
       candidates.push(`${parts[0]}.${parts[1] + b2}.${parts[2] + b3}.${b4}`);
     }
   } else if (mask >= 24) {
-    priorityOffsets.forEach((n) =>
-      candidates.push(`${parts[0]}.${parts[1]}.${parts[2]}.${n}`),
-    );
+    priorityOffsets.forEach((n) => candidates.push(`${parts[0]}.${parts[1]}.${parts[2]}.${n}`));
   } else if (mask >= 16) {
-    // Mid-range blocks (/23 to /16)
     const count = 15;
     const subBlocks = Array.from({ length: count }, (_, i) =>
       i < 64 ? i : Math.floor(Math.random() * Math.pow(2, 24 - mask)),
     );
     subBlocks.forEach((b) => {
-      priorityOffsets
-        .slice(0, 6)
-        .forEach((n) =>
-          candidates.push(`${parts[0]}.${parts[1]}.${parts[2] + b}.${n}`),
-        );
+      priorityOffsets.slice(0, 6).forEach((n) =>
+        candidates.push(`${parts[0]}.${parts[1]}.${parts[2] + b}.${n}`)
+      );
     });
   } else {
-    // Large backbones (/15 and below) - e.g. CANTV
     const count = 40;
     for (let i = 0; i < count; i++) {
       const b2 = Math.floor(Math.random() * Math.pow(2, 24 - mask));
       const b3 = Math.floor(Math.random() * 256);
-      const b4 =
-        priorityOffsets[Math.floor(Math.random() * priorityOffsets.length)];
-      candidates.push(
-        `${parts[0]}.${parts[1] + (mask < 16 ? b2 : 0)}.${b3}.${b4}`,
-      );
+      const b4 = priorityOffsets[Math.floor(Math.random() * priorityOffsets.length)];
+      candidates.push(`${parts[0]}.${parts[1] + (mask < 16 ? b2 : 0)}.${b3}.${b4}`);
     }
   }
 
-  return Array.from(new Set(candidates)).filter(
-    (ip) => !ip.endsWith(".0") && !ip.endsWith(".255"),
-  );
+  return Array.from(new Set(candidates)).filter((ip) => !ip.endsWith(".0") && !ip.endsWith(".255"));
 }
 
 async function main() {
@@ -262,100 +219,71 @@ async function main() {
     ? providerArg.substring(11).replace(/['"]/g, "").toUpperCase()
     : undefined;
 
-  // Legacy fallback (positional argument)
   if (!targetProviderName) {
     const arg = process.argv[2]?.toUpperCase();
-    if (arg && !arg.startsWith("--")) {
-      targetProviderName = arg;
-    }
+    if (arg && !arg.startsWith("--")) targetProviderName = arg;
   }
 
   const aggressive = process.argv.includes("--aggressive");
   const fullOnly = process.argv.includes("--full-only");
-
   let providersToScan = Object.entries(VENEZUELA_ISPS);
 
   if (targetProviderName) {
-    // Find provider by key or by name, stripping spaces if matching by key
     const foundEntry = Object.entries(VENEZUELA_ISPS).find(
       ([key, info]) =>
         key === targetProviderName?.replace(/\s+/g, "") ||
         info.name.toUpperCase() === targetProviderName,
     );
-
     if (foundEntry) {
       providersToScan = [foundEntry];
-      console.log(
-        `--- Starting PROVIDER-SPECIFIC Discovery: ${foundEntry[1].name} ${aggressive ? "(AGGRESSIVE)" : ""} ${fullOnly ? "(FULL-SCAN ONLY)" : ""} ---`,
-      );
+      console.log(`--- Starting PROVIDER-SPECIFIC Discovery: ${foundEntry[1].name} ---`);
     } else {
-      console.error(
-        `Error: Provider "${targetProviderName}" not found in constants/providers.ts`,
-      );
+      console.error(`Error: Provider "${targetProviderName}" not found`);
       process.exit(1);
     }
   } else {
-    console.log(
-      `--- Starting OMNI-DISCOVERY ${aggressive ? "(AGGRESSIVE)" : ""} ${fullOnly ? "(FULL-SCAN ONLY)" : ""} ---`,
-    );
+    console.log(`--- Starting OMNI-DISCOVERY ${aggressive ? "(AGGRESSIVE)" : ""} ---`);
   }
 
-  for (const [key, providerInfo] of providersToScan) {
+  for (const [, providerInfo] of providersToScan) {
     const { asn, name: providerName } = providerInfo;
     console.log(`\n[${providerName}] Searching AS${asn}...`);
-    let prefixes = await getPrefixes(asn).then((p) =>
-      p.sort(() => 0.5 - Math.random()),
-    );
+    let prefixes = await getPrefixes(asn).then((p) => p.sort(() => 0.5 - Math.random()));
 
-    // Filter for FULL SCAN blocks only if requested
     if (fullOnly) {
       const originalCount = prefixes.length;
       prefixes = prefixes.filter((p) => {
         const mask = parseInt(p.split("/")[1]);
         return aggressive ? mask >= 22 : mask >= 24;
       });
-      console.log(
-        `  Filtered: ${prefixes.length}/${originalCount} prefixes match full-scan criteria.`,
-      );
+      console.log(`  Filtered: ${prefixes.length}/${originalCount} prefixes match full-scan criteria.`);
     }
 
-    const { data: scannedData } = await supabase
-      .from("scanned_prefixes")
-      .select("prefix")
-      .eq("asn", asn);
-    const scannedSet = new Set(scannedData?.map((d) => d.prefix) || []);
-
+    const scannedRows = await db
+      .select({ prefix: scannedPrefixes.prefix })
+      .from(scannedPrefixes)
+      .where(eq(scannedPrefixes.asn, asn));
+    const scannedSet = new Set(scannedRows.map((d) => d.prefix));
     const unscannedPrefixes = prefixes.filter((p) => !scannedSet.has(p));
 
-    console.log(
-      `  [${providerName}] Segmentos faltantes: ${unscannedPrefixes.length} (Ya escaneados: ${scannedSet.size})`,
-    );
-    console.log(
-      `  Processing ${unscannedPrefixes.length} remaining prefixes in parallel batches...`,
-    );
+    console.log(`  [${providerName}] Remaining: ${unscannedPrefixes.length} (Already scanned: ${scannedSet.size})`);
 
-    const PREFIX_BATCH_SIZE = 2; // Reduced to 2 to avoid overwhelming the network
+    const PREFIX_BATCH_SIZE = 2;
     for (let i = 0; i < unscannedPrefixes.length; i += PREFIX_BATCH_SIZE) {
       const batch = unscannedPrefixes.slice(i, i + PREFIX_BATCH_SIZE);
 
       await Promise.all(
         batch.map(async (prefix, batchIdx) => {
           const globalIdx = i + batchIdx + 1;
-          const remainingSegments = unscannedPrefixes.length - globalIdx;
+          const remaining = unscannedPrefixes.length - globalIdx;
 
-          if (await isPrefixScanned(prefix)) {
-            // Uncomment for deep debugging:
-            // process.stdout.write(`s`);
-            return;
-          }
+          if (await isPrefixScanned(prefix)) return;
 
           const candidates = getCandidates(prefix, aggressive);
-          process.stdout.write(
-            `\n  [Faltan: ${remainingSegments} segmentos] [${globalIdx}/${unscannedPrefixes.length}] [${providerName}] Scanning ${prefix} (${candidates.length} IPs)... `,
-          );
+          process.stdout.write(`\n  [Remaining: ${remaining}] [${globalIdx}/${unscannedPrefixes.length}] [${providerName}] Scanning ${prefix} (${candidates.length} IPs)... `);
 
-          const aliveResults = [];
-          const CHUNK_SIZE = 25; // Smaller chunks to prevent socket drops
+          const aliveResults: { ip: string; port: number }[] = [];
+          const CHUNK_SIZE = 25;
           for (let j = 0; j < candidates.length; j += CHUNK_SIZE) {
             const chunk = candidates.slice(j, j + CHUNK_SIZE);
             const results = await Promise.all(
@@ -364,36 +292,21 @@ async function main() {
                 return port ? { ip, port } : null;
               }),
             );
-            aliveResults.push(...results);
+            aliveResults.push(...(results.filter((r) => r !== null) as { ip: string; port: number }[]));
           }
 
-          const aliveIps = aliveResults.filter((r) => r !== null) as {
-            ip: string;
-            port: number;
-          }[];
-
-          if (aliveIps.length > 0) {
-            console.log(`FOUND ${aliveIps.length} nodes! Geolocating...`);
-            const geoResults = await getGeoBatch(aliveIps.map((a) => a.ip));
-
+          if (aliveResults.length > 0) {
+            console.log(`FOUND ${aliveResults.length} nodes! Geolocating...`);
+            const geoResults = await getGeoBatch(aliveResults.map((a) => a.ip));
             let savedCount = 0;
             for (const geo of geoResults) {
               if (geo.status === "success") {
-                const aliveInfo = aliveIps.find((a) => a.ip === geo.query);
-                const saved = await saveIpToDb(
-                  geo,
-                  aliveInfo!.port,
-                  providerName,
-                  asn,
-                );
+                const aliveInfo = aliveResults.find((a) => a.ip === geo.query);
+                const saved = await saveIpToDb(geo, aliveInfo!.port, providerName, asn);
                 if (saved) savedCount++;
               }
             }
-            if (savedCount > 0) {
-              process.stdout.write(
-                `  [${providerName}] Saved ${savedCount} new nodes.\n`,
-              );
-            }
+            if (savedCount > 0) process.stdout.write(`  [${providerName}] Saved ${savedCount} new nodes.\n`);
             await new Promise((r) => setTimeout(r, 1000));
           } else {
             process.stdout.write(`Done (0 found).`);
@@ -403,10 +316,11 @@ async function main() {
         }),
       );
 
-      // Progress tick
       process.stdout.write(".");
     }
   }
+
+  await pool.end();
 }
 
 main();

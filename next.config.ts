@@ -12,7 +12,6 @@ const nextConfig: NextConfig = {
       "recharts",
       "leaflet",
       "react-leaflet",
-      "@supabase/supabase-js",
       "@sentry/nextjs",
     ],
   },

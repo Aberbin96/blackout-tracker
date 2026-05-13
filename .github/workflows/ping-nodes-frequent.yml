@@ -55,9 +55,7 @@ jobs:
 
             - name: Run Frequent Monitoring
               env:
-                  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-                  SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-                  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+                  DATABASE_URL: ${{ secrets.DATABASE_URL }}
                   API_CHECK_URL: ${{ secrets.API_CHECK_URL }}
                   CRON_SECRET: ${{ secrets.CRON_SECRET }}
                   MIN_STABILITY_SCORE: ${{ secrets.MIN_STABILITY_SCORE || 10 }}

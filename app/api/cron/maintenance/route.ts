@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/utils/supabase";
+import { db } from "@/db";
+import { connectivityChecks, dailyRegionalStats } from "@/db/schema";
+import { and, lt, sql } from "drizzle-orm";
 
 /**
  * Daily maintenance cron
@@ -15,25 +17,44 @@ export async function POST(request: Request) {
   console.log("[Maintenance Cron] Running rollup and cleanup...");
 
   try {
-    const { error } = await supabase.rpc("rollup_and_cleanup_checks");
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayDate = yesterday.toISOString().slice(0, 10);
 
-    if (error) {
-      console.error("[Maintenance Cron] RPC Error:", error.message);
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-    }
+    // 1. Rollup yesterday's checks into daily_regional_stats
+    await db.execute(sql`
+      INSERT INTO daily_regional_stats (date, state, provider, total_checks, online_checks, avg_latency)
+      SELECT
+        DATE(timestamp) AS date,
+        state,
+        provider,
+        COUNT(*) AS total_checks,
+        SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) AS online_checks,
+        AVG(CASE WHEN status = 'online' THEN latency END) AS avg_latency
+      FROM connectivity_checks
+      WHERE DATE(timestamp) = ${yesterdayDate}
+      GROUP BY DATE(timestamp), state, provider
+      ON DUPLICATE KEY UPDATE
+        total_checks = VALUES(total_checks),
+        online_checks = VALUES(online_checks),
+        avg_latency = VALUES(avg_latency)
+    `);
 
-    return NextResponse.json({ 
-      success: true, 
+    // 2. Delete checks older than 14 days
+    const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    await db.delete(connectivityChecks).where(lt(connectivityChecks.timestamp, cutoff));
+
+    return NextResponse.json({
+      success: true,
       message: "Daily rollup and cleanup completed successfully.",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   } catch (err: any) {
-    console.error("[Maintenance Cron] Unexpected Error:", err.message);
+    console.error("[Maintenance Cron] Error:", err.message);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
-// Support GET for manual testing via tool if needed
 export async function GET(request: Request) {
   return POST(request);
 }

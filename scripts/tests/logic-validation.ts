@@ -31,9 +31,8 @@ function mockResults(
 async function testLogic() {
   console.log("--- Starting Logic Validation Test ---");
 
-  // We can't easily call MonitoringService.processBlackouts because it's private and depends on Supabase.
-  // However, we've implemented the logic in MonitoringService.ts.
-  // To verify without polluting the DB, let's manually mirror the thresholds here and verify they match our plan.
+  // Verifies blackout threshold logic without hitting the DB.
+  // Mirrors the thresholds defined in AnalyzerService.
 
   const scenarios = [
     {

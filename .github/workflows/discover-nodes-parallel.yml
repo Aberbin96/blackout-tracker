@@ -1,0 +1,60 @@
+name: 🔍 Daily IP Discovery (High-Throughput)
+
+on:
+  schedule:
+    # Run daily at 2:15 AM (after frequent pings and before stability analysis)
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+    inputs:
+      limit_per_job:
+        description: "Prefixes to scan per job"
+        required: true
+        default: "20"
+      aggressive:
+        description: "Enable aggressive mode"
+        type: boolean
+        default: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  discover-parallel:
+    name: Discovery Chunk ${{ matrix.chunk }}
+    runs-on: ubuntu-latest
+    environment: Production
+    strategy:
+      matrix:
+        # 25 parallel jobs to reach ~25,000 IPs daily
+        chunk: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+      max-parallel: 15 # Conservative concurrency to respect API limits
+      fail-fast: false
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm install --include=dev
+
+      - name: Run Parallel Discovery
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          # Add random jitter (0-120s) to stagger API requests across 25 jobs
+          SLEEP_TIME=$((RANDOM % 120))
+          echo "Staggering start by $SLEEP_TIME seconds..."
+          sleep $SLEEP_TIME
+          
+          LIMIT=${{ github.event.inputs.limit_per_job || 20 }}
+          OFFSET=$(( ${{ matrix.chunk }} * $LIMIT ))
+          AGGRESSIVE_FLAG="${{ github.event.inputs.aggressive == 'true' && '--aggressive' || '' }}"
+          
+          echo "--- Running Discovery Chunk ${{ matrix.chunk }} [Offset: $OFFSET, Limit: $LIMIT] ---"
+          npm run discover -- --limit-prefixes=$LIMIT --offset-prefixes=$OFFSET $AGGRESSIVE_FLAG
