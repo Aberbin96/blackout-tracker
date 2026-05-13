@@ -1,1 +1,0 @@
-ALTER TABLE monitoring_targets ADD COLUMN IF NOT EXISTS last_online_at TIMESTAMP WITH TIME ZONE;
