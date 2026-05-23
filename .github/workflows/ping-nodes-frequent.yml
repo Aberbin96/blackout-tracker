@@ -56,9 +56,29 @@ jobs:
             - name: Run Frequent Monitoring
               env:
                   DATABASE_URL: ${{ secrets.DATABASE_URL }}
-                  API_CHECK_URL: ${{ secrets.API_CHECK_URL }}
-                  CRON_SECRET: ${{ secrets.CRON_SECRET }}
                   MIN_STABILITY_SCORE: ${{ secrets.MIN_STABILITY_SCORE || 10 }}
               run: |
                   echo "--- Running Fast Monitoring for Stable Nodes [Chunk: ${{ matrix.chunk }}] ---"
                   npx tsx scripts/monitor-ips.ts ${{ matrix.chunk }}
+
+    analyze-blackouts:
+        runs-on: ubuntu-latest
+        environment: Production
+        needs: ping-frequent
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "24"
+                  cache: "npm"
+
+            - name: Install Dependencies
+              run: npm install --include=dev
+
+            - name: Run Blackout Analysis
+              env:
+                  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+              run: npx tsx scripts/analyze-blackouts.ts

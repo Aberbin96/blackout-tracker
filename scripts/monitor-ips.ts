@@ -1,5 +1,4 @@
 import net from "net";
-import axios from "axios";
 import path from "path";
 import * as dotenv from "dotenv";
 import { exec } from "child_process";
@@ -24,8 +23,6 @@ if (envResult.error) {
 }
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const apiUrl = process.env.API_CHECK_URL;
-const cronSecret = process.env.CRON_SECRET;
 const minStabilityScoreEnv = parseInt(process.env.MIN_STABILITY_SCORE || "10");
 
 if (!DATABASE_URL) {
@@ -245,24 +242,6 @@ async function main() {
       { operationName: `Storing batch ${Math.floor(i / INSERT_BATCH_SIZE) + 1}` }
     ).then(() => console.log(`Batch ${Math.floor(i / INSERT_BATCH_SIZE) + 1} stored.`))
       .catch((err) => console.error(`Error storing batch:`, err.message));
-  }
-
-  if (apiUrl && cronSecret) {
-    const triggerUrl = new URL(apiUrl);
-    triggerUrl.searchParams.set("trigger_only", "true");
-    if (stateFilter) triggerUrl.searchParams.set("state", stateFilter);
-    console.log(`Triggering analysis at ${triggerUrl}...`);
-    try {
-      await axios.post(triggerUrl.toString(), {}, {
-        headers: { Authorization: `Bearer ${cronSecret}`, "Content-Type": "application/json" },
-        timeout: 10000,
-      });
-      console.log("Analysis trigger sent.");
-    } catch (e: any) {
-      console.error("Failed to notify API:", e.message);
-    }
-  } else {
-    console.log("No API_CHECK_URL or CRON_SECRET found. Analysis not triggered.");
   }
 
   console.log("Worker finished.");

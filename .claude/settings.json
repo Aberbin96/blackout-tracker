@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"connectivity_checks\\\\|connectivityChecks\" /Users/alejandro.berbin/Projects/Others/blackout-tracker --include=\"*.ts\" --include=\"*.js\" ! -path \"*/node_modules/*\" ! -path \"*/.next/*\")",
+      "Bash(grep -r \"connectivityChecks\\\\|connectivity_checks\" /Users/alejandro.berbin/Projects/Others/blackout-tracker --include=\"*.ts\" ! -path \"*/node_modules/*\" ! -path \"*/.next/*\")"
+    ]
+  }
+}

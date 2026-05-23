@@ -240,21 +240,21 @@ export async function getMapData(state?: string, provider?: string) {
   try {
     const cutoff = fifteenMinutesAgo();
     const PAGE_SIZE = 1000;
-    let allData: any[] = [];
+    const allData: any[] = [];
     let offset = 0;
     let hasMore = true;
 
-    while (hasMore) {
-      const latestChecks = db
-        .select({
-          ip: connectivityChecks.ip,
-          status: connectivityChecks.status,
-          rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${connectivityChecks.ip} ORDER BY ${connectivityChecks.timestamp} DESC)`.as("rn"),
-        })
-        .from(connectivityChecks)
-        .where(gte(connectivityChecks.timestamp, cutoff))
-        .as("latest_checks");
+    const latestChecks = db
+      .select({
+        ip: connectivityChecks.ip,
+        status: connectivityChecks.status,
+        rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${connectivityChecks.ip} ORDER BY ${connectivityChecks.timestamp} DESC)`.as("rn"),
+      })
+      .from(connectivityChecks)
+      .where(gte(connectivityChecks.timestamp, cutoff))
+      .as("latest_checks");
 
+    while (hasMore) {
       const rows = await db
         .select({
           ip: monitoringTargets.ip,
@@ -277,7 +277,7 @@ export async function getMapData(state?: string, provider?: string) {
       if (!rows || rows.length === 0) {
         hasMore = false;
       } else {
-        allData = [...allData, ...rows];
+        allData.push(...rows);
         if (rows.length < PAGE_SIZE) hasMore = false;
         else offset += PAGE_SIZE;
       }
@@ -304,14 +304,19 @@ export async function getFiltersData() {
   cacheLife("weeks");
 
   try {
-    const targets = await db
-      .select({ state: monitoringTargets.state, provider: monitoringTargets.provider })
-      .from(monitoringTargets)
-      .where(and(eq(monitoringTargets.isActive, true), gte(monitoringTargets.stabilityScore, MIN_SCORE)))
-      .limit(50000);
+    const [stateRows, providerRows] = await Promise.all([
+      db.selectDistinct({ state: monitoringTargets.state })
+        .from(monitoringTargets)
+        .where(and(eq(monitoringTargets.isActive, true), gte(monitoringTargets.stabilityScore, MIN_SCORE)))
+        .orderBy(asc(monitoringTargets.state)),
+      db.selectDistinct({ provider: monitoringTargets.provider })
+        .from(monitoringTargets)
+        .where(and(eq(monitoringTargets.isActive, true), gte(monitoringTargets.stabilityScore, MIN_SCORE)))
+        .orderBy(asc(monitoringTargets.provider)),
+    ]);
 
-    const states = Array.from(new Set(targets.map((t) => t.state).filter(Boolean))).sort() as string[];
-    const providers = Array.from(new Set(targets.map((t) => t.provider).filter(Boolean))).sort() as string[];
+    const states = stateRows.map((r) => r.state).filter(Boolean) as string[];
+    const providers = providerRows.map((r) => r.provider).filter(Boolean) as string[];
 
     return { states, providers };
   } catch (error) {

@@ -40,8 +40,7 @@ export async function POST(request: Request) {
         avg_latency = VALUES(avg_latency)
     `);
 
-    // 2. Delete checks older than 14 days
-    const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
     await db.delete(connectivityChecks).where(lt(connectivityChecks.timestamp, cutoff));
 
     return NextResponse.json({
