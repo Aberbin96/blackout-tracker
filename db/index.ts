@@ -11,6 +11,6 @@ if (!DATABASE_URL) {
   throw new Error("DATABASE_URL is required.");
 }
 
-const pool = mysql.createPool({ uri: DATABASE_URL, connectionLimit: 5 });
+const pool = mysql.createPool({ uri: DATABASE_URL, connectionLimit: 10 });
 
 export const db = drizzle(pool, { schema, mode: "default" });

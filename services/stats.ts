@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { connectivityChecks, monitoringTargets, blackoutEvents, dailyRegionalStats } from "@/db/schema";
-import { and, eq, gte, sql, desc, asc, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, gte, ne, sql, desc, asc, inArray, isNotNull } from "drizzle-orm";
 import { cacheLife } from "next/cache";
 
 const MIN_SCORE = Number(process.env.MIN_STABILITY_SCORE || 10);
@@ -239,10 +239,6 @@ export async function getMapData(state?: string, provider?: string) {
 
   try {
     const cutoff = fifteenMinutesAgo();
-    const PAGE_SIZE = 1000;
-    const allData: any[] = [];
-    let offset = 0;
-    let hasMore = true;
 
     const latestChecks = db
       .select({
@@ -254,45 +250,39 @@ export async function getMapData(state?: string, provider?: string) {
       .where(gte(connectivityChecks.timestamp, cutoff))
       .as("latest_checks");
 
-    while (hasMore) {
-      const rows = await db
-        .select({
-          ip: monitoringTargets.ip,
-          lat: monitoringTargets.lat,
-          lon: monitoringTargets.lon,
-          provider: monitoringTargets.provider,
-          state: monitoringTargets.state,
-          city: monitoringTargets.city,
-          status: sql<string>`COALESCE(latest_checks.status, 'unknown')`,
-        })
-        .from(monitoringTargets)
-        .leftJoin(latestChecks, and(
-          eq(monitoringTargets.ip, latestChecks.ip),
-          eq(sql`${latestChecks.rn}`, 1),
-        ))
-        .where(and(...buildBaseFilters(state, provider)))
-        .limit(PAGE_SIZE)
-        .offset(offset);
+    const hasCoords = [
+      isNotNull(monitoringTargets.lat),
+      ne(monitoringTargets.lat, 0),
+      isNotNull(monitoringTargets.lon),
+      ne(monitoringTargets.lon, 0),
+    ];
 
-      if (!rows || rows.length === 0) {
-        hasMore = false;
-      } else {
-        allData.push(...rows);
-        if (rows.length < PAGE_SIZE) hasMore = false;
-        else offset += PAGE_SIZE;
-      }
-    }
+    const rows = await db
+      .select({
+        ip: monitoringTargets.ip,
+        lat: monitoringTargets.lat,
+        lon: monitoringTargets.lon,
+        provider: monitoringTargets.provider,
+        state: monitoringTargets.state,
+        city: monitoringTargets.city,
+        status: sql<string>`COALESCE(latest_checks.status, 'unknown')`,
+      })
+      .from(monitoringTargets)
+      .leftJoin(latestChecks, and(
+        eq(monitoringTargets.ip, latestChecks.ip),
+        eq(sql`${latestChecks.rn}`, 1),
+      ))
+      .where(and(...buildBaseFilters(state, provider), ...hasCoords))
+      .limit(10000);
 
-    return allData
-      .filter((t) => t.lat && t.lon && t.lat !== 0 && t.lon !== 0)
-      .map((t) => ({
-        ip: t.ip,
-        lat: t.lat ?? 0,
-        lon: t.lon ?? 0,
-        provider: t.provider,
-        location: `${t.state} - ${t.city}`,
-        status: t.status,
-      }));
+    return rows.map((t) => ({
+      ip: t.ip,
+      lat: t.lat ?? 0,
+      lon: t.lon ?? 0,
+      provider: t.provider,
+      location: `${t.state} - ${t.city}`,
+      status: t.status,
+    }));
   } catch (error) {
     console.error("Error fetching map data:", error);
     return [];
